@@ -19,4 +19,3 @@ class DecideTransactionRequest(BaseModel):
     card_expiry: str
     card_cvv: SecretStr
     timestamp: str
-

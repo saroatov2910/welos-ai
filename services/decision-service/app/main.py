@@ -1,10 +1,3 @@
-from typing import Any
-
-from fastapi import FastAPI
-
-app = FastAPI(title="WelosAI Decision Service")
-
-# class DecideRequest 
 from fastapi import FastAPI
 
 from app.models import DecideRequest, DecideTransactionRequest
