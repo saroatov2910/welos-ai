@@ -1,11 +1,8 @@
-import json
-import os
-
 from dotenv import load_dotenv
 from fastapi import FastAPI
 
+from app.audit import write_audit_event
 from app.models import CheckTransactionRequest, DecideTransactionRequest
-from app.s3_resource_service import save_add_recode
 from app.services import get_decision_or_404, save_transaction_decision
 
 load_dotenv()
@@ -16,16 +13,7 @@ app = FastAPI(title="WelosAI Decision Service")
 @app.post("/get_check_transaction")
 def get_check_transaction(request: CheckTransactionRequest):
     result = get_decision_or_404(request.transaction_id)
-
-    bucket_name = os.getenv("S3_AUDIT_BUCKET")
-    if bucket_name:
-        key = f"decision-service/check-transaction/{request.transaction_id}.json"
-        save_add_recode(
-            bucket_name=bucket_name,
-            key=key,
-            data=json.dumps(result, ensure_ascii=False).encode("utf-8"),
-        )
-
+    write_audit_event("transaction_checked", result)
     return result
 
 

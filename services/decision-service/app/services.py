@@ -1,19 +1,12 @@
-import json
-import os
 import re
 from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import HTTPException
 
-try:
-    import boto3
-except ImportError:  # pragma: no cover - optional in local dev until installed
-    boto3 = None
-
+from app.audit import write_audit_event
 
 decisions_store: dict[str, dict[str, Any]] = {}
-card_fingerprints: dict[str, dict] = {}
 
 
 POLICY_THRESHOLDS = {
@@ -23,42 +16,6 @@ POLICY_THRESHOLDS = {
 
 
 VELOCITY_WINDOW_MINUTES = 10
-
-
-def _env_flag(name: str) -> bool:
-    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _get_s3_client():
-    if boto3 is None:
-        return None
-
-    region_name = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
-    return boto3.client("s3", region_name=region_name)
-
-
-def store_audit_event(event_name: str, payload: dict[str, Any]) -> None:
-    if not _env_flag("ENABLE_S3_AUDIT"):
-        return
-
-    bucket_name = os.getenv("S3_AUDIT_BUCKET")
-    if not bucket_name:
-        raise HTTPException(status_code=500, detail="S3_AUDIT_BUCKET is not configured")
-
-    s3_client = _get_s3_client()
-    if s3_client is None:
-        raise HTTPException(status_code=500, detail="boto3 is not installed")
-
-    prefix = os.getenv("S3_AUDIT_PREFIX", "audit").strip().strip("/")
-    event_timestamp = datetime.now(UTC).isoformat().replace("+00:00", "Z")
-    object_key = f"{prefix}/{event_name}/{event_timestamp}-{payload.get('transaction_id', 'event')}.json"
-
-    s3_client.put_object(
-        Bucket=bucket_name,
-        Key=object_key,
-        Body=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-        ContentType="application/json",
-    )
 
 
 def validate_currency_code(currency: str) -> None:
@@ -243,12 +200,7 @@ def save_transaction_decision(
         "timestamp": timestamp,
     }
     decisions_store[transaction_id] = decision
-    try:
-        store_audit_event("decision_created", decision)
-    except HTTPException:
-        raise
-    except Exception as exc:  # pragma: no cover - audit should not break core flow
-        raise HTTPException(status_code=500, detail=f"Failed to write S3 audit event: {exc}") from exc
+    write_audit_event("decision_created", decision)
     return decision
 
 
