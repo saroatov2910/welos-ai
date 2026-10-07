@@ -149,3 +149,20 @@ def test_decide_transaction_allows_any_currency_when_whitelist_disabled():
     assert response.status_code == 200
     body = response.json()
     assert "unsupported_currency" not in body["reasons"]
+
+
+def test_decide_transaction_rejects_timestamp_without_timezone():
+    payload = {
+        "transaction_id": "tx-007",
+        "amount": 100.0,
+        "currency": "USD",
+        "card_number": "4242424242424242",
+        "card_cvv": "123",
+        "card_expiry": "12/99",
+        "timestamp": "2026-10-04T10:00:00",
+    }
+
+    response = client.post("/decide_transaction", json=payload)
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Timestamp must include timezone (e.g. Z)"
