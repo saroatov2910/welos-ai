@@ -72,6 +72,7 @@ def decide_transaction(request: DecideTransactionRequest):
         card_cvv=request.card_cvv.get_secret_value(),
         card_expiry=request.card_expiry,
         timestamp=request.timestamp,
+        customer_id=request.customer_id,
     )
 
 

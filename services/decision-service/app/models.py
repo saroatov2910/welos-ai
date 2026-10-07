@@ -6,6 +6,7 @@ class CheckTransactionRequest(BaseModel):
 
 
 class DecideTransactionRequest(BaseModel):
+    customer_id: str
     transaction_id: str
     amount: float = Field(gt=0)
     currency: str

@@ -66,12 +66,15 @@ def validate_currency_code(currency: str) -> None:
         raise HTTPException(status_code=400, detail="Invalid currency code")
 
 
-def calculate_velocity_risk(transaction_id: str, event_timestamp: str) -> tuple[int, list[str]]:
+def calculate_velocity_risk(transaction_id: str, customer_id: str, event_timestamp: str) -> tuple[int, list[str]]:
     event_time = _parse_timestamp(event_timestamp)
     attempts_in_window = 0
 
     for existing_transaction_id, decision in decisions_store.items():
         if existing_transaction_id == transaction_id:
+            continue
+        # Only count attempts by the same customer.
+        if decision.get("customer_id") != customer_id:
             continue
 
         stored_timestamp = decision.get("timestamp")
@@ -159,6 +162,7 @@ def _parse_timestamp(timestamp: str) -> datetime:
 
 def calculate_risk_score_and_reasons(
     transaction_id: str,
+    customer_id: str,
     amount: float,
     currency: str,
     timestamp: str,
@@ -185,7 +189,7 @@ def calculate_risk_score_and_reasons(
         risk_score += 10
         reasons.append("round_amount_pattern")
 
-    velocity_score, velocity_reasons = calculate_velocity_risk(transaction_id, timestamp)
+    velocity_score, velocity_reasons = calculate_velocity_risk(transaction_id, customer_id, timestamp)
     risk_score += velocity_score
     reasons.extend(velocity_reasons)
 
@@ -202,6 +206,7 @@ def make_policy_decision(risk_score: int) -> str:
 
 def save_transaction_decision(
     transaction_id: str,
+    customer_id: str,
     amount: float,
     currency: str,
     card_number: str,
@@ -213,12 +218,19 @@ def save_transaction_decision(
     normalized_card_number = validate_card_number(card_number)
     validate_cvv(card_cvv)
     validate_card_expiry(card_expiry)
-    risk_score, reasons = calculate_risk_score_and_reasons(transaction_id, amount, currency, timestamp)
+    risk_score, reasons = calculate_risk_score_and_reasons(
+        transaction_id=transaction_id,
+        customer_id=customer_id,
+        amount=amount,
+        currency=currency,
+        timestamp=timestamp,
+    )
     decision_status = make_policy_decision(risk_score)
 
     masked_card = mask_card_number(normalized_card_number)
     decision = {
         "decision_id": transaction_id,
+        "customer_id": customer_id,
         "transaction_id": transaction_id,
         "decision": decision_status,
         "risk_score": risk_score,
