@@ -1,14 +1,8 @@
 from pydantic import BaseModel, Field, SecretStr
 
 
-class DecideRequest(BaseModel):
-    service_name: str
-    environment: str
-    cpu_usage: float
-    memory_usage: float
-    replicas: int
-    error_rate: float
-    latency_ms: float
+class CheckTransactionRequest(BaseModel):
+    transaction_id: str
 
 
 class DecideTransactionRequest(BaseModel):
