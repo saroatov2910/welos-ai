@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 
 from app.models import CheckTransactionRequest, DecideTransactionRequest
-from app.s3_resource_service import check_s3_connection, list_s3_files, save_add_recode
+from app.s3_resource_service import save_add_recode
 from app.services import get_decision_or_404, save_transaction_decision
 
 load_dotenv()
@@ -60,17 +60,6 @@ def calculate_geo_risk_endpoint(ip_country: str, card_country: str):
     if ip_country.strip().upper() == card_country.strip().upper():
         return {"geo_risk_score": 0, "reason": "geo_match"}
     return {"geo_risk_score": 20, "reason": "geo_mismatch"}
-
-
-@app.get("/s3/connection")
-def s3_connection(bucket_name: str | None = None):
-    return check_s3_connection(bucket_name=bucket_name)
-
-
-@app.get("/s3/files")
-def s3_files(bucket_name: str, prefix: str = ""):
-    files = list_s3_files(bucket_name=bucket_name, prefix=prefix)
-    return {"bucket_name": bucket_name, "prefix": prefix, "files": files, "count": len(files)}
 
 
 @app.post("/decide_transaction")

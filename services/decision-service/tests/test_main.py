@@ -166,3 +166,8 @@ def test_decide_transaction_rejects_timestamp_without_timezone():
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Timestamp must include timezone (e.g. Z)"
+
+
+def test_s3_debug_endpoints_are_not_exposed():
+    assert client.get("/s3/connection").status_code == 404
+    assert client.get("/s3/files", params={"bucket_name": "any"}).status_code == 404
