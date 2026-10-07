@@ -1,4 +1,4 @@
-from pydantic import BaseModel, SecretStr
+from pydantic import BaseModel, Field, SecretStr
 
 
 class DecideRequest(BaseModel):
@@ -13,7 +13,7 @@ class DecideRequest(BaseModel):
 
 class DecideTransactionRequest(BaseModel):
     transaction_id: str
-    amount: float
+    amount: float = Field(gt=0)
     currency: str
     card_number: SecretStr
     card_expiry: str
