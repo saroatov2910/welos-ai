@@ -1,0 +1,51 @@
+name: decision-service CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/decision-service/**"
+      - ".github/workflows/decision-service-ci.yml"
+  pull_request:
+    paths:
+      - "services/decision-service/**"
+      - ".github/workflows/decision-service-ci.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/decision-service
+    env:
+      # Tests must never touch real AWS resources.
+      ENABLE_S3_AUDIT: "false"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: services/decision-service/requirements*.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Lint
+        run: ruff check app tests
+
+      - name: Format check
+        run: ruff format --check app tests
+
+      - name: Test
+        run: pytest -q
