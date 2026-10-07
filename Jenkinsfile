@@ -2,6 +2,11 @@
 pipeline {
     agent any
 
+    // Check GitHub for new commits every 5 minutes (webhooks can't reach localhost).
+    triggers {
+        pollSCM('H/5 * * * *')
+    }
+
     options {
         timeout(time: 15, unit: 'MINUTES')
         disableConcurrentBuilds()
