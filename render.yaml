@@ -5,7 +5,7 @@ services:
     name: veloce-decision-service
     runtime: docker
     plan: free
-    branch: feature/decision-service
+    branch: main
     dockerContext: ./services/decision-service
     dockerfilePath: ./services/decision-service/Dockerfile
     healthCheckPath: /health
