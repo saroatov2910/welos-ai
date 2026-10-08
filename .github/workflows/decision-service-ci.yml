@@ -24,9 +24,6 @@ jobs:
     defaults:
       run:
         working-directory: services/decision-service
-    env:
-      # Tests must never touch real AWS resources.
-      ENABLE_S3_AUDIT: "false"
     steps:
       - uses: actions/checkout@v4
 

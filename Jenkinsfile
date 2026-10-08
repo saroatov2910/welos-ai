@@ -14,8 +14,6 @@ pipeline {
 
     environment {
         SERVICE_DIR = 'services/decision-service'
-        // Tests must never touch real AWS resources.
-        ENABLE_S3_AUDIT = 'false'
     }
 
     stages {

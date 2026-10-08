@@ -1,49 +1,47 @@
 # decision-service
 
-## Setup
+Real-time card-fraud decision API (FastAPI). Scores each transaction and returns
+`accept`, `review` or `reject` with the reasons behind the score.
+
+## Run with Docker (recommended)
 
 ```bash
-cd ~/Desktop/welos-ai/services/decision-service
+docker compose up -d --build
+curl localhost:8001/health      # {"status":"ok"}
+```
+
+API docs: http://localhost:8001/docs. The audit log is kept in the `audit-logs` volume:
+
+```bash
+docker compose exec decision-service cat /var/log/decision-service/decisions.jsonl
+```
+
+## Run locally (for development)
+
+```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
-python -m pip install --upgrade pip
 pip install -r requirements-dev.txt
+uvicorn app.main:app --reload --port 8000
 ```
 
 ## Environment
 
-Copy [.env.example](.env.example) to `.env` and fill in your AWS values if you want S3 audit uploads.
+Copy [.env.example](.env.example) to `.env`.
 
-- `AWS_REGION`: AWS region for the S3 client
-- `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`: AWS credentials
-- `ENABLE_S3_AUDIT`: set to `true` to upload audit JSON to S3
-- `S3_AUDIT_BUCKET`: destination bucket for audit files
-- `S3_AUDIT_PREFIX`: optional key prefix inside the bucket
+- `AUDIT_LOG_PATH`: file for the local, append-only audit log (JSON Lines).
+  Leave empty to disable auditing. The Docker image sets it to
+  `/var/log/decision-service/decisions.jsonl`.
 
-## Daily use
+## Checks (same as CI)
 
 ```bash
-cd ~/Desktop/welos-ai/services/decision-service
-source .venv/bin/activate
-python -V
-pip list
+ruff check app tests
+ruff format --check app tests
+pytest -q
 ```
 
 ## Dependency layout
 
-- `requirements.txt`: runtime dependencies for the service
+- `requirements.txt`: runtime dependencies
 - `requirements-dev.txt`: development and test dependencies
-
-## Optional: run tests
-
-```bash
-pytest -q
-```
-
-## Optional: run FastAPI app
-
-If you add `app/main.py` with a FastAPI object named `app`:
-
-```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
