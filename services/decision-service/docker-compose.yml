@@ -1,0 +1,12 @@
+services:
+  decision-service:
+    build: .
+    image: veloce/decision-service:local
+    ports:
+      - "8001:8000"
+    volumes:
+      - audit-logs:/var/log/decision-service
+    restart: unless-stopped
+
+volumes:
+  audit-logs:
