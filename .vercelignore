@@ -1,0 +1,5 @@
+# Allowlist: Vercel serves only the static website.
+# Everything else (services, agents, Jenkins, .env secrets) is never uploaded.
+/*
+!index.html
+!vercel.json

@@ -1,7 +1,16 @@
+# Render Blueprint: public demo environment for the decision-service API.
+# The real product runs on-prem; this is only a demo. Use test cards only.
 services:
   - type: web
-    name: welos-ai
-    env: python
-    buildCommand: pip install -r services/requirements.txt
-    startCommand: uvicorn services.main:app --host 0.0.0.0 --port $PORT
+    name: veloce-decision-service
+    runtime: docker
     plan: free
+    branch: feature/decision-service
+    dockerContext: ./services/decision-service
+    dockerfilePath: ./services/decision-service/Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # The container listens on 8000 (see Dockerfile CMD).
+      - key: PORT
+        value: "8000"
