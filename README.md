@@ -110,7 +110,6 @@ Jenkinsfile                  Jenkins pipeline
 .github/workflows/           GitHub Actions pipeline
 render.yaml                  demo deployment of the API
 index.html, vercel.json      website on Vercel
-web/                         Next.js frontend (in progress)
 ROADMAP.md                   what is built and what comes next
 ```
 
