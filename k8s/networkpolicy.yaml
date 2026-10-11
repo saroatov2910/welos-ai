@@ -1,0 +1,15 @@
+# "Card data never leaves the network", enforced by the cluster, not just by the code.
+# decision-service may receive requests, but it may not open any outbound connection:
+# no internet, no other services. Even injected code could not send card data out.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: decision-service-deny-egress
+  namespace: veloce
+spec:
+  podSelector:
+    matchLabels:
+      app: decision-service
+  policyTypes:
+    - Egress
+  egress: []
