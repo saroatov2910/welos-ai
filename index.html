@@ -151,7 +151,7 @@
             <div class="card">
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>
               <h3>Data stays inside <span class="status live">Live</span></h3>
-              <p>Local audit log, masked card numbers, CVV never stored, API key required.</p>
+              <p>Network policy blocks all outbound traffic. Local audit log, masked card numbers, CVV never stored.</p>
             </div>
             <div class="card">
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"></path><path d="M9 12l2 2 4-4"></path></svg>
@@ -160,8 +160,8 @@
             </div>
             <div class="card">
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2"></rect><path d="M11 18h2"></path></svg>
-              <h3>Control from phone <span class="status planned">Planned</span></h3>
-              <p>Card blocking and alerts to the security manager, who releases in one tap.</p>
+              <h3>Control from phone <span class="status live">Blocking live</span></h3>
+              <p>Risky cards are blocked automatically; the security manager can block or release a card through the API. Phone alerts are planned.</p>
             </div>
           </div>
         </div>
@@ -174,9 +174,10 @@
           <div class="grid">
             <div class="card"><span class="step">01</span><h3>API key</h3><p>Only registered stores can ask.</p></div>
             <div class="card"><span class="step">02</span><h3>Validation</h3><p>Luhn check, CVV, expiry, amount, timezone.</p></div>
-            <div class="card"><span class="step">03</span><h3>Risk score</h3><p>Rules add points from 0 to 100.</p></div>
-            <div class="card"><span class="step">04</span><h3>Decision</h3><p>Accept, review or reject.</p></div>
-            <div class="card"><span class="step">05</span><h3>Audit</h3><p>Written to a local, append-only log.</p></div>
+            <div class="card"><span class="step">03</span><h3>Blocklist</h3><p>Blocked cards are rejected at once, matched by an HMAC, never by the number.</p></div>
+            <div class="card"><span class="step">04</span><h3>Risk score</h3><p>Rules add points from 0 to 100.</p></div>
+            <div class="card"><span class="step">05</span><h3>Decision</h3><p>Accept, review or reject. A score of 90+ blocks the card for 24 hours.</p></div>
+            <div class="card"><span class="step">06</span><h3>Audit</h3><p>Written to a local, append-only log.</p></div>
           </div>
 
           <h3 style="margin: 40px 0 14px; font-size: 20px;">The risk rules</h3>

@@ -45,14 +45,14 @@ CI/CD: commit → Jenkins / GitHub Actions → סריקות → Docker image →
 
 ---
 
-## שלב 1: API key 🔒 (בעבודה)
+## שלב 1: API key 🔒
 - [x] `app/security.py`: השומר (401, ו-503 כשאין מפתח מוגדר)
 - [x] `main.py`: כל ה-endpoints מוגנים, חוץ מ-`/health` ו-`/readiness`
 - [x] `tests/conftest.py`: הטסטים שולחים מפתח
-- [ ] 4 טסטים לשומר (חסר מפתח, מפתח שגוי, fail closed, health פתוח)
-- [ ] commit ו-push, ו-Jenkins חוזר לירוק
-- [ ] `API_KEY` ב-Render (**לפני** merge ל-`main`)
-- [ ] `API_KEY` ב-`.env` וב-`docker-compose.yml`
+- [x] 4 טסטים לשומר (חסר מפתח, מפתח שגוי, fail closed, health פתוח)
+- [x] commit ו-push, ו-Jenkins חוזר לירוק
+- [ ] `API_KEY` ו-`CARD_HASH_KEY` ב-Render (**לפני** merge ל-`main`)
+- [x] `docker-compose.yml` קורא את `.env`, ו-`.env.example` מתעד את המפתחות
 - [ ] PR מ-`develop` ל-`main`
 
 ## שלב 2: Redis, הזיכרון של השומר
@@ -64,13 +64,15 @@ CI/CD: commit → Jenkins / GitHub Actions → סריקות → Docker image →
 - [ ] טסטים עם `fakeredis`
 - [ ] Redis ב-Render (Key Value)
 
-## שלב 3: מנגנון חסימה
+## שלב 3: חסימת כרטיס ✅
 **הבטחה 5.** היום `is_entity_blocked` מחזיר תמיד `False`.
-- [ ] בדיקת חסימה בתחילת כל עסקה
-- [ ] חסימה אוטומטית: 2 דחיות ב-10 דקות, ואז חסימה ל-30 דקות
-- [ ] `POST /blocks` ו-`DELETE /blocks/{id}`: חסימה ושחרור ידניים
-- [ ] כל חסימה ושחרור נרשמים ב-audit
-- [ ] טסטים
+- [x] בדיקת חסימה בתחילת כל עסקה (כרטיס חסום = reject מיד)
+- [x] חסימה אוטומטית: reject עם ציון 90 ומעלה, חסימה ל-24 שעות
+- [x] `POST /blocks`, `GET /blocks`, `DELETE /blocks/{id}`: חסימה, רשימה ושחרור
+- [x] זיהוי לפי HMAC של מספר הכרטיס (`CARD_HASH_KEY`). המספר עצמו לא נשמר
+- [x] כל חסימה ושחרור נרשמים ב-audit
+- [x] 5 טסטים
+- [ ] לשמור חסימות ב-Redis (היום בזיכרון)
 
 ## שלב 4: AI Analyst
 **הבטחות 3 ו-5.** AI מנתח **רק** מקרי `review`, ברקע, בלי פרטי כרטיס.
@@ -80,13 +82,16 @@ CI/CD: commit → Jenkins / GitHub Actions → סריקות → Docker image →
 - [ ] ניקוי נתונים: בלי מספר כרטיס, CVV ותוקף. `customer_id` מוחלף בקוד אנונימי
 - [ ] אם ה-AI לא זמין, העסקאות ממשיכות, וה-`review` מחכה בתור
 
-## שלב 5: Kubernetes ☸️
+## שלב 5: Kubernetes ☸️ (רץ על k3s מקומי)
+- [x] manifests ב-`k8s/`: Namespace, Deployment, Service, PVC
+- [x] **NetworkPolicy: חוסמת כל תנועה יוצאת מה-pod. נבדק: DNS ו-IP ישיר נחסמים**
+- [x] `securityContext`: non-root, read-only filesystem, drop ALL, בלי privilege escalation
 **הבטחה 1.** ככה בנק מתקין מערכת.
 - [ ] Helm chart: API, worker, Redis
-- [ ] probes: `/health` ו-`/readiness`
-- [ ] `Secret` ל-`API_KEY`, ו-`ConfigMap` להגדרות
-- [ ] `PersistentVolumeClaim` ל-audit ול-Redis
-- [ ] `resources`: requests ו-limits
+- [x] probes: `/health` ו-`/readiness`
+- [x] `Secret` ל-`API_KEY` ול-`CARD_HASH_KEY` (נוצר עם kubectl, לא ב-git)
+- [x] `PersistentVolumeClaim` ל-audit
+- [x] `resources`: requests ו-limits
 - [ ] GitOps עם Flux
 
 ## שלב 6: ניטור והתראות 📊
@@ -101,7 +106,7 @@ CI/CD: commit → Jenkins / GitHub Actions → סריקות → Docker image →
 **הבטחה 4.**
 - [x] lint, format וטסטים ב-Jenkins וב-GitHub Actions
 - [x] Jenkins על `develop`, רץ לבד על כל commit
-- [ ] סריקות: `bandit`, `pip-audit`, `Trivy`
+- [x] סריקות אבטחה ב-Jenkins: `bandit`, `pip-audit`, `gitleaks`, `trivy`
 - [ ] בניית image ו-push ל-registry (GHCR או ECR)
 - [ ] הסוכן ב-pipeline: בודק כל PR שמשנה כללים
 - [ ] גרסאות קבועות ב-`requirements.txt`
@@ -113,8 +118,8 @@ CI/CD: commit → Jenkins / GitHub Actions → סריקות → Docker image →
 - [ ] להחליף את Render
 
 ## שלב 9: הצגה בראיון 📄
-- [ ] README ראשי עם דיאגרמת ארכיטקטורה
-- [ ] תוכן של Veloce AI באתר
+- [x] README ראשי עם דיאגרמת ארכיטקטורה
+- [x] תוכן של Veloce AI באתר, עם לוגו ותגיות Live / Planned
 - [ ] צילומי מסך: Jenkins (אדום, ואז ירוק), Grafana, Flux
 - [ ] תסריט דמו של 5 דקות
 
@@ -130,3 +135,9 @@ CI/CD: commit → Jenkins / GitHub Actions → סריקות → Docker image →
 - PR #1 עם בדיקות ירוקות
 - API ב-Render ואתר ב-Vercel, מחוברים
 - סוכן בדיקת כללים: שלבים 1–4
+- API key עם Fail Closed, ו-22 טסטים
+- **DevSecOps:** 4 סריקות אבטחה בכל commit (bandit, pip-audit, gitleaks, trivy)
+- **Kubernetes על k3s:** probes, limits, non-root, read-only, PVC, Secret
+- **NetworkPolicy:** ה-pod לא יכול לפתוח שום חיבור החוצה (נבדק)
+- **חסימת כרטיס** לפי HMAC: אוטומטית וידנית, בלי לשמור את מספר הכרטיס
+- אתר עם לוגו בכתובת veloce-ai-demo.vercel.app
