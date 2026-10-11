@@ -31,22 +31,6 @@ def readiness():
     return {"ready": True}
 
 
-@protected.get("/is_entity_blocked/{entity_id}")
-def is_entity_blocked_endpoint(entity_id: str):
-    return {"entity_id": entity_id, "blocked": False}
-
-
-@protected.post("/block_entity_if_needed")
-def block_entity_if_needed_endpoint(entity_id: str, risk_score: int, threshold: int = 80):
-    blocked_now = risk_score >= threshold
-    return {
-        "entity_id": entity_id,
-        "risk_score": risk_score,
-        "threshold": threshold,
-        "blocked_now": blocked_now,
-    }
-
-
 @protected.get("/calculate_geo_risk")
 def calculate_geo_risk_endpoint(ip_country: str, card_country: str):
     if ip_country.strip().upper() == card_country.strip().upper():
