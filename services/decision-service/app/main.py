@@ -1,10 +1,11 @@
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, FastAPI
+from fastapi import APIRouter, Depends, FastAPI, HTTPException
 
+from app import blocklist
 from app.audit import write_audit_event
-from app.models import CheckTransactionRequest, DecideTransactionRequest
+from app.models import BlockCardRequest, CheckTransactionRequest, DecideTransactionRequest
 from app.security import require_api_key
-from app.services import get_decision_or_404, save_transaction_decision
+from app.services import get_decision_or_404, save_transaction_decision, validate_card_number
 
 load_dotenv()
 
@@ -55,6 +56,28 @@ def decide_transaction(request: DecideTransactionRequest):
 @protected.get("/decisions/{decision_id}")
 def get_decision_by_id(decision_id: str):
     return get_decision_or_404(decision_id)
+
+
+@protected.post("/blocks", status_code=201)
+def block_card_endpoint(request: BlockCardRequest):
+    card_number = validate_card_number(request.card_number.get_secret_value())
+    block = blocklist.block_card(card_number, reason=request.reason, blocked_by="security-manager", hours=request.hours)
+    write_audit_event("card_blocked", block)
+    return block
+
+
+@protected.get("/blocks")
+def list_blocks_endpoint():
+    return {"blocks": blocklist.list_blocks()}
+
+
+@protected.delete("/blocks/{block_id}")
+def unblock_card_endpoint(block_id: str):
+    block = blocklist.unblock(block_id)
+    if block is None:
+        raise HTTPException(status_code=404, detail="Block not found")
+    write_audit_event("card_unblocked", block)
+    return block
 
 
 app.include_router(protected)

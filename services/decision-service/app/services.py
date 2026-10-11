@@ -4,6 +4,7 @@ from typing import Any
 
 from fastapi import HTTPException
 
+from app import blocklist
 from app.audit import write_audit_event
 
 decisions_store: dict[str, dict[str, Any]] = {}
@@ -175,14 +176,30 @@ def save_transaction_decision(
     normalized_card_number = validate_card_number(card_number)
     validate_cvv(card_cvv)
     validate_card_expiry(card_expiry)
-    risk_score, reasons = calculate_risk_score_and_reasons(
-        transaction_id=transaction_id,
-        customer_id=customer_id,
-        amount=amount,
-        currency=currency,
-        timestamp=timestamp,
-    )
+
+    # A blocked card is rejected at once, before any scoring.
+    active_block = blocklist.get_active_block(normalized_card_number)
+    if active_block is not None:
+        risk_score, reasons = 100, ["card_blocked"]
+    else:
+        risk_score, reasons = calculate_risk_score_and_reasons(
+            transaction_id=transaction_id,
+            customer_id=customer_id,
+            amount=amount,
+            currency=currency,
+            timestamp=timestamp,
+        )
     decision_status = make_policy_decision(risk_score)
+
+    # A very risky rejection blocks the card, so the thief cannot keep trying.
+    auto_block = None
+    if active_block is None and decision_status == "reject" and risk_score >= blocklist.AUTO_BLOCK_MIN_SCORE:
+        auto_block = blocklist.block_card(
+            normalized_card_number,
+            reason=f"auto: risk score {risk_score}",
+            blocked_by="system",
+            hours=blocklist.AUTO_BLOCK_HOURS,
+        )
 
     masked_card = mask_card_number(normalized_card_number)
     decision = {
@@ -198,9 +215,12 @@ def save_transaction_decision(
         "card_number_masked": masked_card,
         "card_expiry": card_expiry,
         "timestamp": timestamp,
+        "card_blocked": active_block is not None or auto_block is not None,
     }
     decisions_store[transaction_id] = decision
     write_audit_event("decision_created", decision)
+    if auto_block is not None:
+        write_audit_event("card_blocked", auto_block)
     return decision
 
 

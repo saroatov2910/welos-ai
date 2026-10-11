@@ -37,6 +37,11 @@ spec:
                 secretKeyRef:
                   name: decision-service-secrets
                   key: API_KEY
+            - name: CARD_HASH_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: decision-service-secrets
+                  key: CARD_HASH_KEY
           # Kubernetes restarts the container if /health stops answering...
           livenessProbe:
             httpGet:
