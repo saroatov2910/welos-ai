@@ -22,7 +22,6 @@ SYSTEM_PROMPT = "You review code changes in a fraud-detection engine. Find bugs.
 BLOCKING_SEVERITIES = {"critical", "high"}
 
 
-# Step 3: the fixed structure the model must answer in
 class Finding(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
