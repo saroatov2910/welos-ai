@@ -1,111 +1,132 @@
-# Veloce AI: Roadmap לפרויקט DevOps
+# Veloce AI: Roadmap
 
-**המטרה:** להראות שרשרת DevOps מלאה, מ-commit ועד שירות שרץ ומנוטר ב-Kubernetes,
-על מוצר אמיתי: מנוע החלטות נגד הונאות שרץ on-prem.
+**המוצר:** "שומר סף" מקומי נגד הונאות בכרטיסי אשראי, שמותקן בתוך הרשת של החנות או הבנק.
+**מטרת הפרויקט:** פורטפוליו לראיון DevOps. התשתית היא הלב, והאפליקציה היא המטען שהיא מריצה.
 
 סמן `[x]` כשמשימה מסתיימת.
 
+---
+
+## חמש ההבטחות של המוצר, ואיך מקיימים כל אחת
+
+| # | הבטחה | איך מקיימים אותה | שלב |
+|---|---|---|---|
+| 1 | **שומר סף מקומי** בחנות או בבנק | Docker, Kubernetes ו-Helm. Redis כזיכרון מקומי | 2, 5 |
+| 2 | **החלטה בפחות מ-15ms** | כללים מקומיים, velocity ב-Redis, ומדידה ב-Prometheus | 2, 6 |
+| 3 | **המידע לא יוצא החוצה** | audit מקומי, API key, ו-AI שמקבל רק נתונים מנוקים | 1, 4 |
+| 4 | **AI בודק כל עדכון לכללים** | הסוכן ב-pipeline, על כל PR | 7 |
+| 5 | **התראות ושליטה מהטלפון** | מנגנון חסימה, AI Analyst על `review`, והתראות לטלגרם | 3, 4, 6 |
+
+## הארכיטקטורה (היעד)
+
 ```
-commit → CI (lint, tests, security scan) → Docker image → registry
-       → GitOps (Flux) → Kubernetes → monitoring + alerts → טלפון
+עסקה ──→ API key ──→ חסום? ──כן──→ ❌ reject
+                       │ לא
+                       ▼
+               מנוע כללים (< 15ms) ←──→ Redis (velocity, חסימות)
+                       │
+        ┌──────────────┼──────────────┐
+     accept         review          reject ──→ חסימה אוטומטית
+        │              │
+        │              ▼  ברקע, לא בקופה
+        │        תור → AI Analyst (Ollama מקומי / Bedrock)
+        │              │  נתונים בלי פרטי כרטיס
+        │              ▼
+        │        📱 טלגרם: [חסום] [אשר]
+        │
+        └──→ audit מקומי ──→ Fluent Bit ──→ S3 (ארכיון)
+
+CI/CD: commit → Jenkins / GitHub Actions → סריקות → Docker image → registry → Kubernetes
 ```
 
 **באוויר עכשיו (סביבת דמו):**
-- אתר: https://welos-ai.vercel.app
+- אתר: https://veloce-ai-demo.vercel.app
 - API: https://veloce-decision-service.onrender.com/docs
 
 ---
 
-## שלב 0: לסגור את מה שפתוח
-- [x] audit מקומי במקום S3 (`app/audit.py`)
-- [x] למחוק את `boto3` מ-`requirements.txt`
-- [x] למחוק את `app/s3_resource_service.py`
-- [x] `.env.example`: `AUDIT_LOG_PATH` במקום משתני AWS
-- [x] `.gitignore`: להוסיף `*.jsonl`
-- [x] `Jenkinsfile` ו-GitHub Actions: למחוק את `ENABLE_S3_AUDIT`
-- [x] README של decision-service: להחליף את ההסבר על S3
-- [ ] טסט ל-audit המקומי
-- [ ] **`.env` שלך: למחוק את מפתחות AWS, ולבטל את ה-Access Key ב-AWS Console**
+## שלב 1: API key 🔒 (בעבודה)
+- [x] `app/security.py`: השומר (401, ו-503 כשאין מפתח מוגדר)
+- [x] `main.py`: כל ה-endpoints מוגנים, חוץ מ-`/health` ו-`/readiness`
+- [x] `tests/conftest.py`: הטסטים שולחים מפתח
+- [ ] 4 טסטים לשומר (חסר מפתח, מפתח שגוי, fail closed, health פתוח)
+- [ ] commit ו-push, ו-Jenkins חוזר לירוק
+- [ ] `API_KEY` ב-Render (**לפני** merge ל-`main`)
+- [ ] `API_KEY` ב-`.env` וב-`docker-compose.yml`
+- [ ] PR מ-`develop` ל-`main`
 
-## שלב 1: אבטחת ה-API הציבורי 🔒 (דחוף, ה-API פתוח לכולם)
-- [ ] API key ב-header `X-API-Key`. `/health` ו-`/readiness` נשארים פתוחים
-- [ ] המפתח נשמר כ-Environment Variable ב-Render, לא בקוד
-- [ ] rate limiting: הגבלת מספר בקשות לדקה
-- [ ] טסטים: בלי מפתח מחזיר 401, עם מפתח מחזיר 200
+## שלב 2: Redis, הזיכרון של השומר
+**הבטחות 1 ו-2.** היום ההחלטות בזיכרון ונמחקות בכל restart, ו-velocity איטי ככל שיש יותר עסקאות.
+- [ ] Redis ב-`docker-compose.yml`, עם volume
+- [ ] `app/store.py`: כל הגישה ל-Redis במקום אחד
+- [ ] החלטות נשמרות ב-Redis, עם תפוגה
+- [ ] velocity: לכל לקוח חלון של 10 דקות. הזמן קבוע, לא משנה כמה עסקאות יש
+- [ ] טסטים עם `fakeredis`
+- [ ] Redis ב-Render (Key Value)
 
-## שלב 2: קונטיינר 🐳
-- [x] `Dockerfile`: multi-stage, משתמש לא-root, `HEALTHCHECK`
-- [x] `.dockerignore`
-- [x] `docker-compose.yml` (פורט 8001, volume ל-audit)
-- [ ] גרסאות קבועות ב-`requirements.txt` (build שאפשר לשחזר)
+## שלב 3: מנגנון חסימה
+**הבטחה 5.** היום `is_entity_blocked` מחזיר תמיד `False`.
+- [ ] בדיקת חסימה בתחילת כל עסקה
+- [ ] חסימה אוטומטית: 2 דחיות ב-10 דקות, ואז חסימה ל-30 דקות
+- [ ] `POST /blocks` ו-`DELETE /blocks/{id}`: חסימה ושחרור ידניים
+- [ ] כל חסימה ושחרור נרשמים ב-audit
+- [ ] טסטים
 
-## שלב 3: CI מלא 🔁
-- [x] lint, format וטסטים ב-Jenkins וב-GitHub Actions
-- [x] Jenkins רץ לבד על כל commit
-- [ ] סריקת אבטחה לקוד: `bandit`
-- [ ] סריקת ספריות פגיעות: `pip-audit`
-- [ ] בניית Docker image ב-Jenkins
-- [ ] סריקת ה-image: `Trivy`
-- [ ] push ל-registry (GHCR) עם tag לפי commit
-- [ ] Jenkins Configuration as Code (JCasC)
-- [ ] PR ל-`main`, כדי ש-GitHub Actions ירוץ בפעם הראשונה
+## שלב 4: AI Analyst
+**הבטחות 3 ו-5.** AI מנתח **רק** מקרי `review`, ברקע, בלי פרטי כרטיס.
+- [ ] תור (Redis Streams): עסקאות `review` נכנסות לתור
+- [ ] worker נפרד שמעבד את התור
+- [ ] ספק AI בהגדרה: `ANALYST_PROVIDER=ollama` (מקומי) או `bedrock` (AWS)
+- [ ] ניקוי נתונים: בלי מספר כרטיס, CVV ותוקף. `customer_id` מוחלף בקוד אנונימי
+- [ ] אם ה-AI לא זמין, העסקאות ממשיכות, וה-`review` מחכה בתור
 
-## שלב 4: Kubernetes ☸️ (מקומי, על docker-desktop)
-- [ ] `Deployment` עם `livenessProbe` (`/health`) ו-`readinessProbe` (`/readiness`)
-- [ ] `Service`
-- [ ] `ConfigMap` להגדרות, ו-`Secret` ל-API key
-- [ ] `PersistentVolumeClaim` ל-audit log
+## שלב 5: Kubernetes ☸️
+**הבטחה 1.** ככה בנק מתקין מערכת.
+- [ ] Helm chart: API, worker, Redis
+- [ ] probes: `/health` ו-`/readiness`
+- [ ] `Secret` ל-`API_KEY`, ו-`ConfigMap` להגדרות
+- [ ] `PersistentVolumeClaim` ל-audit ול-Redis
 - [ ] `resources`: requests ו-limits
-- [ ] Helm chart עם values לסביבות dev ו-prod
-- [ ] Ingress עם HTTPS (cert-manager)
+- [ ] GitOps עם Flux
 
-## שלב 5: GitOps עם Flux 🔄
-- [ ] להתקין Flux על ה-cluster
-- [ ] תיקיית `deploy/` עם הגדרות הסביבות
-- [ ] Image Automation: image חדש מעדכן את הגרסה ב-git לבד
-- [ ] פריסה ל-prod רק אחרי אישור PR
+## שלב 6: ניטור והתראות 📊
+**הבטחות 2 ו-5.**
+- [ ] `/metrics` ל-Prometheus: זמן החלטה, החלטות לפי סוג, חסימות
+- [ ] Grafana dashboard
+- [ ] התראה כש-p99 עובר 15ms
+- [ ] Alertmanager לטלגרם: חסימות, ו-`review` עם ניתוח של ה-AI
+- [ ] Fluent Bit: audit ל-S3 (IAM עם `PutObject` בלבד, הצפנה, `il-central-1`)
 
-## שלב 6: Observability 📊
-- [ ] `/metrics` ל-Prometheus: זמן החלטה (histogram), החלטות לפי סוג
-- [ ] Prometheus ו-Grafana, עם dashboard
-- [ ] SLO: התראה כש-p99 של זמן ההחלטה עובר 15ms
-- [ ] לוגים מובנים (JSON)
-- [ ] Alertmanager → Telegram או Slack בטלפון
+## שלב 7: CI/CD מלא 🔁
+**הבטחה 4.**
+- [x] lint, format וטסטים ב-Jenkins וב-GitHub Actions
+- [x] Jenkins על `develop`, רץ לבד על כל commit
+- [ ] סריקות: `bandit`, `pip-audit`, `Trivy`
+- [ ] בניית image ו-push ל-registry (GHCR או ECR)
+- [ ] הסוכן ב-pipeline: בודק כל PR שמשנה כללים
+- [ ] גרסאות קבועות ב-`requirements.txt`
 
-## שלב 7: הסוכן ב-pipeline 🤖
-- [x] הסוכן: שלבים 1–4 (diff, מודל, מבנה תשובה, החלטה)
-- [ ] הנחיות אמיתיות (`SYSTEM_PROMPT`)
-- [ ] stage ב-Jenkins שמריץ את הסוכן על כל PR
-- [ ] API key של Anthropic ב-Jenkins Credentials
-
-## שלב 8: ענן אמיתי עם IaC 🏗️ (במקום Render)
-- [ ] Terraform: VM בענן (Oracle Always Free, AWS Free Tier או Hetzner)
-- [ ] k3s על ה-VM
-- [ ] אותו Helm chart ו-Flux מהשלבים הקודמים
+## שלב 8: ענן עם Terraform 🏗️
+- [ ] Terraform: VM ב-AWS, עם state ב-S3
+- [ ] k3s, ואותו Helm chart
 - [ ] דומיין ו-HTTPS
-- [ ] למחוק את Render
+- [ ] להחליף את Render
 
-## שלב 9: אפליקציה (מינימום לדמו אמין)
-- [ ] מנגנון חסימה אמיתי (היום `is_entity_blocked` מחזיר תמיד `False`)
-- [ ] velocity עם חלון זמן (ביצועים)
-- [ ] להכניס את בדיקת המיקום (geo) לציון
-- [ ] ניקיון: שמות endpoints (`resource_service.py` נמחק)
-
-## שלב 10: פרונט ותיעוד 📄
-- [x] אתר ב-Vercel, מחובר ל-API (`.vercelignore` כרשימה לבנה)
-- [ ] תוכן של Veloce AI במקום הטקסט הכללי
-- [ ] טופס דמו "נסה עסקה" (צריך CORS ב-API)
-- [ ] פריסה אוטומטית של האתר מ-GitHub
+## שלב 9: הצגה בראיון 📄
 - [ ] README ראשי עם דיאגרמת ארכיטקטורה
-- [ ] צילומי מסך: Jenkins, Grafana, Flux
+- [ ] תוכן של Veloce AI באתר
+- [ ] צילומי מסך: Jenkins (אדום, ואז ירוק), Grafana, Flux
+- [ ] תסריט דמו של 5 דקות
 
 ---
 
 ## ✅ מה כבר נעשה
-- CI: lint, format וטסטים ב-GitHub Actions וב-Jenkins
-- Jenkins מקומי ב-Docker, שרץ לבד על כל commit
-- 4 תיקוני באגים ואבטחה עם טסטים: סכום שלילי, timestamp, velocity לפי לקוח, endpoints פתוחים ל-S3
-- audit מקומי במקום S3
-- השירות ארוז ב-Docker (non-root, healthcheck)
-- API באוויר ב-Render, ואתר באוויר ב-Vercel, מחוברים
+- מנוע כללים: סכום, שעה, סכום עגול, velocity לפי לקוח
+- תיקוני באגים ואבטחה עם טסטים: סכום שלילי, timestamp, velocity, endpoints פתוחים ל-S3
+- audit מקומי (JSON Lines) במקום S3 בתוך הבקשה
+- Docker: multi-stage, non-root, healthcheck
+- Jenkins (Docker) ו-GitHub Actions: lint, format וטסטים
+- שני ענפים: `main` (יציב, Render פורס ממנו) ו-`develop` (עבודה, Jenkins בודק)
+- PR #1 עם בדיקות ירוקות
+- API ב-Render ואתר ב-Vercel, מחוברים
 - סוכן בדיקת כללים: שלבים 1–4
