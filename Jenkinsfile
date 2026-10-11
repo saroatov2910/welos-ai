@@ -1,4 +1,4 @@
-// CI pipeline for decision-service: install -> lint -> format check -> tests.
+// CI pipeline for decision-service: install -> lint -> format -> tests -> security scans.
 pipeline {
     agent any
 
@@ -55,6 +55,41 @@ pipeline {
                 always {
                     junit "${SERVICE_DIR}/test-results.xml"
                 }
+            }
+        }
+
+        // DevSecOps: every commit is scanned. A finding fails the build.
+        stage('Security: code (bandit)') {
+            steps {
+                dir("${SERVICE_DIR}") {
+                    sh '.venv/bin/bandit -r app --severity-level medium'
+                }
+            }
+        }
+
+        stage('Security: dependencies (pip-audit)') {
+            steps {
+                dir("${SERVICE_DIR}") {
+                    sh '.venv/bin/pip-audit -r requirements.txt'
+                }
+            }
+        }
+
+        stage('Security: secrets in git (gitleaks)') {
+            steps {
+                sh 'gitleaks git . --redact --no-banner'
+            }
+        }
+
+        stage('Security: files and Dockerfile (trivy)') {
+            steps {
+                sh '''
+                    trivy fs --quiet --cache-dir "$JENKINS_HOME/.cache/trivy" \
+                      --scanners vuln,misconfig,secret \
+                      --severity HIGH,CRITICAL --exit-code 1 \
+                      --skip-dirs "${SERVICE_DIR}/.venv" \
+                      "${SERVICE_DIR}"
+                '''
             }
         }
     }
