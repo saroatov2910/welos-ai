@@ -2,8 +2,9 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services import decisions_store
+from tests.conftest import TEST_API_KEY
 
-client = TestClient(app)
+client = TestClient(app, headers={"X-API-Key": TEST_API_KEY})
 
 
 def setup_function():
@@ -212,3 +213,25 @@ def test_velocity_flags_same_customer():
     body = _decide("tx-v2", "cust-A", "2026-10-04T10:05:00Z").json()
 
     assert "too_many_attempts_10m" in body["reasons"]
+
+
+def test_protected_endpoint_rejects_missing_api_key():
+    response = TestClient(app).get("/decisions/any")
+
+    assert response.status_code == 401
+
+
+def test_protected_endpoint_rejects_wrong_api_key():
+    response = TestClient(app, headers={"X-API-Key": "wrong"}).get("/decisions/any")
+
+    assert response.status_code == 401
+
+
+def test_service_fails_closed_without_configured_key(monkeypatch):
+    monkeypatch.delenv("API_KEY")
+
+    assert client.get("/decisions/any").status_code == 503
+
+
+def test_health_is_open_without_api_key():
+    assert TestClient(app).get("/health").status_code == 200
