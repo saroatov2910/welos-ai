@@ -123,6 +123,32 @@ k3s enforces NetworkPolicy out of the box; Docker Desktop's built-in Kubernetes 
 | One replica for now | Decisions, velocity and blocks are in memory; Redis is next, then more replicas |
 | Velocity counted per customer | Counting all traffic flagged honest customers during busy hours (found and fixed with a regression test) |
 
+## API
+
+All endpoints except `/health` and `/readiness` require the `X-API-Key` header.
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/decide_transaction` | Validate, score and decide on a transaction |
+| GET | `/decisions/{decision_id}` | Read a stored decision |
+| POST | `/get_check_transaction` | Read a decision and record the check in the audit log |
+| POST | `/blocks` | Block a card (security manager) |
+| GET | `/blocks` | List blocked cards (last 4 digits only) |
+| DELETE | `/blocks/{block_id}` | Release a card |
+| GET | `/calculate_geo_risk` | Geo risk for an IP country vs card country |
+| GET | `/health`, `/readiness` | Probes, open without a key |
+
+### Environment
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `API_KEY` | yes | Key clients send in `X-API-Key` |
+| `CARD_HASH_KEY` | yes | Secret for the HMAC that identifies blocked cards |
+| `AUDIT_LOG_PATH` | no | Local audit log file (JSON Lines); empty disables auditing |
+
+Without `API_KEY` or `CARD_HASH_KEY` the service fails closed and answers 503.
+Generate a key with `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`.
+
 ## Run it locally with Docker
 
 ```bash
