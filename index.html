@@ -1,163 +1,234 @@
 <!doctype html>
-<html lang="he" dir="rtl">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Welos AI</title>
+    <title>Veloce AI: on-prem fraud gatekeeper</title>
+    <meta name="description" content="Decides on every card transaction in under 15 ms. Card data never leaves the network." />
+    <link rel="icon" type="image/png" href="/assets/favicon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <style>
+      /* Design tokens, taken from the logo */
       :root {
-        color-scheme: dark;
-        --bg: #07111f;
-        --panel: rgba(12, 20, 36, 0.78);
-        --text: #edf4ff;
-        --muted: #9fb1c9;
-        --accent: #55d6ff;
-        --border: rgba(170, 193, 219, 0.14);
+        --bg: #f5f8fc;
+        --surface: #ffffff;
+        --border: #e1e8f2;
+        --navy: #0b1b3a;
+        --text: #0b1b3a;
+        --muted: #4a5b75;
+        --primary: #1d5bff;
+        --primary-hover: #1546d1;
+        --cyan: #16b8e8;
+        --accept: #0f7a55;
+        --review: #a35f00;
+        --reject: #c62828;
       }
 
       * { box-sizing: border-box; }
 
       body {
         margin: 0;
-        min-height: 100vh;
-        font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        background:
-          radial-gradient(circle at top right, rgba(85, 214, 255, 0.22), transparent 28%),
-          radial-gradient(circle at left center, rgba(139, 92, 246, 0.18), transparent 24%),
-          linear-gradient(180deg, #07111f 0%, #0b1729 100%);
+        background: var(--bg);
         color: var(--text);
-        display: grid;
-        place-items: center;
-        padding: 24px;
+        font-family: "IBM Plex Sans", system-ui, sans-serif;
+        line-height: 1.5;
       }
 
-      main {
-        width: min(960px, 100%);
-        padding: 40px;
-        border: 1px solid var(--border);
-        border-radius: 28px;
-        background: var(--panel);
-        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
-        backdrop-filter: blur(18px);
-      }
+      a { color: var(--primary); }
+      a:hover { color: var(--primary-hover); }
 
-      .badge {
-        display: inline-block;
-        padding: 8px 14px;
-        border-radius: 999px;
-        border: 1px solid rgba(85, 214, 255, 0.35);
-        color: var(--accent);
-        font-size: 14px;
-        letter-spacing: 0.02em;
-      }
+      .container { max-width: 1160px; margin: 0 auto; padding: 0 24px; }
 
-      h1 {
-        margin: 22px 0 14px;
-        font-size: clamp(42px, 8vw, 76px);
-        line-height: 0.95;
-      }
+      /* Header */
+      header { background: var(--surface); border-bottom: 1px solid var(--border); }
+      .nav { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 14px 24px; }
+      .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--navy); font-weight: 700; font-size: 20px; }
+      .brand img { height: 40px; width: auto; }
+      .brand span b { color: var(--primary); }
+      .links { display: flex; flex-wrap: wrap; gap: 4px; }
+      .links a { padding: 10px 14px; border-radius: 8px; color: var(--muted); text-decoration: none; font-weight: 500; }
+      .links a:hover { background: var(--bg); color: var(--navy); }
 
-      p {
-        margin: 0;
-        max-width: 62ch;
-        color: var(--muted);
-        font-size: 18px;
-        line-height: 1.8;
-      }
+      /* Hero */
+      .hero { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 40px; align-items: center; padding: 72px 24px 56px; }
+      .badge { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; background: #e8f0ff; color: var(--primary); font-family: "IBM Plex Mono", monospace; font-size: 13px; font-weight: 600; }
+      h1 { margin: 18px 0 16px; font-size: clamp(34px, 5.5vw, 56px); line-height: 1.08; letter-spacing: -0.02em; }
+      .lead { margin: 0; font-size: 19px; color: var(--muted); max-width: 52ch; }
+      .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+      .btn { display: inline-flex; align-items: center; min-height: 48px; padding: 0 22px; border-radius: 10px; font-weight: 600; text-decoration: none; }
+      .btn-primary { background: var(--primary); color: #fff; }
+      .btn-primary:hover { background: var(--primary-hover); color: #fff; }
+      .btn-secondary { border: 1px solid var(--border); background: var(--surface); color: var(--navy); }
+      .btn-secondary:hover { border-color: var(--primary); color: var(--primary); }
+      .hero-logo { width: 100%; max-width: 440px; justify-self: center; }
 
-      .actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 12px;
-        margin-top: 32px;
-      }
+      /* Sections */
+      section { padding: 56px 0; }
+      .alt { background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+      h2 { margin: 0 0 8px; font-size: 30px; letter-spacing: -0.01em; }
+      .sub { margin: 0 0 28px; color: var(--muted); font-size: 17px; max-width: 64ch; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+      .card { padding: 22px; border-radius: 14px; background: var(--surface); border: 1px solid var(--border); }
+      .alt .card { background: var(--bg); }
+      .card svg { color: var(--primary); }
+      .card h3 { margin: 12px 0 6px; font-size: 17px; }
+      .card p { margin: 0; color: var(--muted); font-size: 15px; }
+      .status { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; font-family: "IBM Plex Mono", monospace; vertical-align: middle; }
+      .status.live { background: #e6f6ef; color: var(--accept); }
+      .status.planned { background: #eef2f7; color: var(--muted); }
+      .step { font-family: "IBM Plex Mono", monospace; color: var(--cyan); font-weight: 600; font-size: 14px; }
 
-      a {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-width: 160px;
-        padding: 14px 20px;
-        border-radius: 14px;
-        text-decoration: none;
-        font-weight: 700;
-        transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
-      }
+      /* Score table */
+      .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
+      table { width: 100%; border-collapse: collapse; min-width: 520px; }
+      th, td { padding: 14px 18px; text-align: left; border-bottom: 1px solid var(--border); font-size: 15px; }
+      th { color: var(--muted); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; }
+      tr:last-child td { border-bottom: 0; }
+      td.pts { font-family: "IBM Plex Mono", monospace; font-weight: 600; color: var(--primary); }
+      .decisions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 20px; }
+      .pill { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; font-family: "IBM Plex Mono", monospace; font-weight: 600; font-size: 14px; background: var(--surface); border: 1px solid var(--border); }
+      .pill i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 
-      .primary {
-        color: #05111b;
-        background: linear-gradient(135deg, var(--accent), #bdefff);
-      }
+      /* Pipeline */
+      .pipeline { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+      .chip { padding: 10px 14px; border-radius: 10px; font-family: "IBM Plex Mono", monospace; font-size: 14px; }
+      .chip.done { background: #e6f6ef; border: 1px solid #b7e4cf; color: var(--accept); }
+      .chip.next { border: 1px dashed #b9c6d8; color: var(--muted); }
+      .arrow { color: #9aa8bc; }
+      .legend { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 14px; font-size: 14px; color: var(--muted); }
 
-      .secondary {
-        color: var(--text);
-        border: 1px solid var(--border);
-        background: rgba(255, 255, 255, 0.04);
-      }
-
-      a:hover { transform: translateY(-1px); }
-
-      .grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-        gap: 16px;
-        margin-top: 34px;
-      }
-
-      .card {
-        padding: 18px;
-        border-radius: 20px;
-        border: 1px solid var(--border);
-        background: rgba(255, 255, 255, 0.03);
-      }
-
-      .card h2 {
-        margin: 0 0 8px;
-        font-size: 18px;
-      }
-
-      .card p {
-        font-size: 15px;
-        line-height: 1.7;
-      }
-
-      footer {
-        margin-top: 28px;
-        color: var(--muted);
-        font-size: 14px;
-      }
+      footer { padding: 28px 0; color: var(--muted); font-size: 14px; }
+      footer .container { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; }
     </style>
   </head>
   <body>
-    <main>
-      <span class="badge">Ready to deploy</span>
-      <h1>Welos AI</h1>
-      <p>
-        דף אינטרנט פשוט, נקי ומהיר שאפשר להעלות מיד לאינטרנט. זהו בסיס טוב
-        ל-landing page, להצגת מוצר, או להמשך פיתוח של אפליקציית FastAPI.
-      </p>
+    <header>
+      <nav class="nav container">
+        <a class="brand" href="#top">
+          <img src="/assets/emblem.png" alt="" width="80" height="40" />
+          <span>Veloce <b>AI</b></span>
+        </a>
+        <div class="links">
+          <a href="#promises">Product</a>
+          <a href="#how">How it works</a>
+          <a href="#pipeline">Pipeline</a>
+          <a href="https://veloce-decision-service.onrender.com/docs">Live API</a>
+        </div>
+      </nav>
+    </header>
 
-      <div class="actions">
-        <a class="primary" href="mailto:hello@welos.ai">יצירת קשר</a>
-        <a class="secondary" href="https://veloce-decision-service.onrender.com/docs">נסה את ה-API</a>
+    <main id="top">
+      <div class="hero container">
+        <div>
+          <span class="badge">On-prem fraud gatekeeper</span>
+          <h1>Stop card fraud before the receipt prints.</h1>
+          <p class="lead">Veloce AI runs inside the store or bank network and decides on every card transaction in under 15&nbsp;ms. Card numbers never leave the building.</p>
+          <div class="actions">
+            <a class="btn btn-primary" href="https://veloce-decision-service.onrender.com/docs">Try the live API</a>
+            <a class="btn btn-secondary" href="https://github.com/saroatov2910/welos-ai">View the code</a>
+          </div>
+        </div>
+        <img class="hero-logo" src="/assets/logo.png" alt="Veloce AI logo: a payment card protected by a shield" width="440" height="440" />
       </div>
 
-      <section class="grid">
-        <div class="card">
-          <h2>מהיר לפרסום</h2>
-          <p>דף סטטי שעובד מצוין ב-Vercel בלי runtime מורכב ובלי תלויות מיותרות.</p>
-        </div>
-        <div class="card">
-          <h2>מוכן להרחבה</h2>
-          <p>אפשר להוסיף טפסים, תכנים, חיבור ל-API, או מעבר לאפליקציה מלאה בהמשך.</p>
-        </div>
-        <div class="card">
-          <h2>ידידותי ל-hosting</h2>
-          <p>מתאים ל-Vercel, וגם לשירותים אחרים אם תחליט להעתיק אותו בעתיד.</p>
+      <section id="promises" class="alt">
+        <div class="container">
+          <h2>Five promises</h2>
+          <p class="sub">What the product guarantees, and what each guarantee asks of the infrastructure.</p>
+          <div class="grid">
+            <div class="card">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"></rect><path d="M8 20h8M12 16v4"></path></svg>
+              <h3>Runs on-prem <span class="status live">Live</span></h3>
+              <p>Hardened container, running on Kubernetes (k3s): non-root, read-only filesystem.</p>
+            </div>
+            <div class="card">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"></path></svg>
+              <h3>Under 15 ms <span class="status live">Live</span></h3>
+              <p>Local rules, no network calls in the decision path.</p>
+            </div>
+            <div class="card">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>
+              <h3>Data stays inside <span class="status live">Live</span></h3>
+              <p>Network policy blocks all outbound traffic. Local audit log, masked card numbers, CVV never stored.</p>
+            </div>
+            <div class="card">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"></path><path d="M9 12l2 2 4-4"></path></svg>
+              <h3>AI-reviewed rules <span class="status planned">Planned</span></h3>
+              <p>An AI reviewer reads each rule change and flags critical issues. Built, not yet a pipeline gate.</p>
+            </div>
+            <div class="card">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2"></rect><path d="M11 18h2"></path></svg>
+              <h3>Control from phone <span class="status live">Blocking live</span></h3>
+              <p>Risky cards are blocked automatically; the security manager can block or release a card through the API. Phone alerts are planned.</p>
+            </div>
+          </div>
         </div>
       </section>
 
-      <footer>© Welos AI</footer>
+      <section id="how">
+        <div class="container">
+          <h2>How a transaction is decided</h2>
+          <p class="sub">Every request passes the same steps, all inside the customer network.</p>
+          <div class="grid">
+            <div class="card"><span class="step">01</span><h3>API key</h3><p>Only registered stores can ask.</p></div>
+            <div class="card"><span class="step">02</span><h3>Validation</h3><p>Luhn check, CVV, expiry, amount, timezone.</p></div>
+            <div class="card"><span class="step">03</span><h3>Blocklist</h3><p>Blocked cards are rejected at once, matched by an HMAC, never by the number.</p></div>
+            <div class="card"><span class="step">04</span><h3>Risk score</h3><p>Rules add points from 0 to 100.</p></div>
+            <div class="card"><span class="step">05</span><h3>Decision</h3><p>Accept, review or reject. A score of 90+ blocks the card for 24 hours.</p></div>
+            <div class="card"><span class="step">06</span><h3>Audit</h3><p>Written to a local, append-only log.</p></div>
+          </div>
+
+          <h3 style="margin: 40px 0 14px; font-size: 20px;">The risk rules</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Rule</th><th>When</th><th>Points</th></tr></thead>
+              <tbody>
+                <tr><td>Extremely high amount</td><td>3,000 and above</td><td class="pts">+80</td></tr>
+                <tr><td>High amount</td><td>1,000 to 2,999</td><td class="pts">+45</td></tr>
+                <tr><td>Elevated amount</td><td>400 to 999</td><td class="pts">+25</td></tr>
+                <tr><td>Night hours</td><td>00:00 to 05:00</td><td class="pts">+15</td></tr>
+                <tr><td>Round amount</td><td>1,000 and above, no cents</td><td class="pts">+10</td></tr>
+                <tr><td>Rapid attempts</td><td>3+ by the same customer in 10 minutes</td><td class="pts">+15</td></tr>
+                <tr><td>Very rapid attempts</td><td>5+ by the same customer in 10 minutes</td><td class="pts">+30</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="decisions">
+            <span class="pill"><i style="background: var(--accept)"></i>0-39 accept</span>
+            <span class="pill"><i style="background: var(--review)"></i>40-69 review</span>
+            <span class="pill"><i style="background: var(--reject)"></i>70+ reject</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="pipeline" class="alt">
+        <div class="container">
+          <h2>Delivery pipeline</h2>
+          <p class="sub">A change reaches production only after it passes every check.</p>
+          <div class="pipeline">
+            <span class="chip done">git push</span><span class="arrow" aria-hidden="true">→</span>
+            <span class="chip done">Jenkins: lint + tests</span><span class="arrow" aria-hidden="true">→</span>
+            <span class="chip done">Security scans: bandit, pip-audit, gitleaks, trivy</span><span class="arrow" aria-hidden="true">→</span>
+            <span class="chip done">Pull request + GitHub Actions</span><span class="arrow" aria-hidden="true">→</span>
+            <span class="chip done">Docker image</span><span class="arrow" aria-hidden="true">→</span>
+            <span class="chip done">Deploy: Render + Kubernetes (k3s)</span><span class="arrow" aria-hidden="true">→</span>
+            <span class="chip next">AI rule review gate</span>
+          </div>
+          <div class="legend">
+            <span><span class="chip done" style="padding: 2px 8px;">&nbsp;</span> Running today</span>
+            <span><span class="chip next" style="padding: 2px 8px;">&nbsp;</span> On the roadmap</span>
+          </div>
+        </div>
+      </section>
     </main>
+
+    <footer>
+      <div class="container">
+        <span>Veloce AI: DevOps project</span>
+        <span>Demo environment. Use test card 4242 4242 4242 4242 only.</span>
+      </div>
+    </footer>
   </body>
 </html>

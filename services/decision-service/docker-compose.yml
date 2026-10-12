@@ -2,6 +2,9 @@ services:
   decision-service:
     build: .
     image: veloce/decision-service:local
+    env_file:
+      - path: .env
+        required: false
     ports:
       - "8001:8000"
     volumes:

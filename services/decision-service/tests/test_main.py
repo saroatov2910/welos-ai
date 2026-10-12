@@ -1,13 +1,16 @@
 from fastapi.testclient import TestClient
 
+from app import blocklist
 from app.main import app
 from app.services import decisions_store
+from tests.conftest import TEST_API_KEY
 
-client = TestClient(app)
+client = TestClient(app, headers={"X-API-Key": TEST_API_KEY})
 
 
 def setup_function():
     decisions_store.clear()
+    blocklist.clear()
 
 
 def test_health_returns_ok():
@@ -212,3 +215,86 @@ def test_velocity_flags_same_customer():
     body = _decide("tx-v2", "cust-A", "2026-10-04T10:05:00Z").json()
 
     assert "too_many_attempts_10m" in body["reasons"]
+
+
+def test_protected_endpoint_rejects_missing_api_key():
+    response = TestClient(app).get("/decisions/any")
+
+    assert response.status_code == 401
+
+
+def test_protected_endpoint_rejects_wrong_api_key():
+    response = TestClient(app, headers={"X-API-Key": "wrong"}).get("/decisions/any")
+
+    assert response.status_code == 401
+
+
+def test_service_fails_closed_without_configured_key(monkeypatch):
+    monkeypatch.delenv("API_KEY")
+
+    assert client.get("/decisions/any").status_code == 503
+
+
+def test_health_is_open_without_api_key():
+    assert TestClient(app).get("/health").status_code == 200
+
+
+def _pay(transaction_id, amount, timestamp, card_number="4242424242424242"):
+    return client.post(
+        "/decide_transaction",
+        json={
+            "customer_id": "cust-1",
+            "transaction_id": transaction_id,
+            "amount": amount,
+            "currency": "USD",
+            "card_number": card_number,
+            "card_cvv": "123",
+            "card_expiry": "12/99",
+            "timestamp": timestamp,
+        },
+    ).json()
+
+
+def test_high_risk_reject_blocks_the_card():
+    first = _pay("thief-1", 3500.0, "2026-10-04T02:00:00Z")
+    second = _pay("thief-2", 10.0, "2026-10-04T12:00:00Z")
+
+    assert first["decision"] == "reject"
+    assert first["card_blocked"] is True
+    assert second["decision"] == "reject"
+    assert second["reasons"] == ["card_blocked"]
+
+
+def test_block_does_not_affect_other_cards():
+    _pay("thief-1", 3500.0, "2026-10-04T02:00:00Z")
+
+    other = _pay("other-1", 10.0, "2026-10-04T12:00:00Z", card_number="5555555555554444")
+
+    assert other["decision"] == "accept"
+
+
+def test_manual_block_list_and_release():
+    created = client.post("/blocks", json={"card_number": "4242424242424242", "reason": "reported stolen"})
+    assert created.status_code == 201
+    block = created.json()
+    assert block["card_last4"] == "4242"
+    assert block["blocked_by"] == "security-manager"
+    assert "4242424242424242" not in created.text
+
+    assert _pay("tx-b1", 10.0, "2026-10-04T12:00:00Z")["reasons"] == ["card_blocked"]
+    assert [b["block_id"] for b in client.get("/blocks").json()["blocks"]] == [block["block_id"]]
+
+    assert client.delete(f"/blocks/{block['block_id']}").status_code == 200
+    assert _pay("tx-b2", 10.0, "2026-10-04T12:00:00Z")["decision"] == "accept"
+
+
+def test_unblock_unknown_block_returns_404():
+    assert client.delete("/blocks/does-not-exist").status_code == 404
+
+
+def test_blocking_fails_closed_without_hash_key(monkeypatch):
+    monkeypatch.delenv("CARD_HASH_KEY")
+
+    response = client.post("/blocks", json={"card_number": "4242424242424242", "reason": "x"})
+
+    assert response.status_code == 503

@@ -1,0 +1,92 @@
+# Runs the decision-service container and keeps it healthy.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: decision-service
+  namespace: veloce
+  labels:
+    app: decision-service
+spec:
+  # One replica: decisions and velocity are still kept in memory (Redis is on the roadmap).
+  replicas: 1
+  selector:
+    matchLabels:
+      app: decision-service
+  template:
+    metadata:
+      labels:
+        app: decision-service
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: decision-service
+          image: veloce/decision-service:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: decision-service-secrets
+                  key: API_KEY
+            - name: CARD_HASH_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: decision-service-secrets
+                  key: CARD_HASH_KEY
+          # Kubernetes restarts the container if /health stops answering...
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          # ...and sends no traffic to it until /readiness answers.
+          readinessProbe:
+            httpGet:
+              path: /readiness
+              port: http
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: audit-log
+              mountPath: /var/log/decision-service
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: audit-log
+          persistentVolumeClaim:
+            claimName: decision-service-audit
+        - name: tmp
+          emptyDir: {}
+---
+# Disk for the audit log, so it survives pod restarts.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: decision-service-audit
+  namespace: veloce
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi

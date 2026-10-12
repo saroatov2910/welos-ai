@@ -1,16 +1,21 @@
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import APIRouter, Depends, FastAPI, HTTPException
 
+from app import blocklist
 from app.audit import write_audit_event
-from app.models import CheckTransactionRequest, DecideTransactionRequest
-from app.services import get_decision_or_404, save_transaction_decision
+from app.models import BlockCardRequest, CheckTransactionRequest, DecideTransactionRequest
+from app.security import require_api_key
+from app.services import get_decision_or_404, save_transaction_decision, validate_card_number
 
 load_dotenv()
 
 app = FastAPI(title="WelosAI Decision Service")
 
+# Every route on this router requires a valid X-API-Key header.
+protected = APIRouter(dependencies=[Depends(require_api_key)])
 
-@app.post("/get_check_transaction")
+
+@protected.post("/get_check_transaction")
 def get_check_transaction(request: CheckTransactionRequest):
     result = get_decision_or_404(request.transaction_id)
     write_audit_event("transaction_checked", result)
@@ -27,30 +32,14 @@ def readiness():
     return {"ready": True}
 
 
-@app.get("/is_entity_blocked/{entity_id}")
-def is_entity_blocked_endpoint(entity_id: str):
-    return {"entity_id": entity_id, "blocked": False}
-
-
-@app.post("/block_entity_if_needed")
-def block_entity_if_needed_endpoint(entity_id: str, risk_score: int, threshold: int = 80):
-    blocked_now = risk_score >= threshold
-    return {
-        "entity_id": entity_id,
-        "risk_score": risk_score,
-        "threshold": threshold,
-        "blocked_now": blocked_now,
-    }
-
-
-@app.get("/calculate_geo_risk")
+@protected.get("/calculate_geo_risk")
 def calculate_geo_risk_endpoint(ip_country: str, card_country: str):
     if ip_country.strip().upper() == card_country.strip().upper():
         return {"geo_risk_score": 0, "reason": "geo_match"}
     return {"geo_risk_score": 20, "reason": "geo_mismatch"}
 
 
-@app.post("/decide_transaction")
+@protected.post("/decide_transaction")
 def decide_transaction(request: DecideTransactionRequest):
     return save_transaction_decision(
         transaction_id=request.transaction_id,
@@ -64,6 +53,31 @@ def decide_transaction(request: DecideTransactionRequest):
     )
 
 
-@app.get("/decisions/{decision_id}")
+@protected.get("/decisions/{decision_id}")
 def get_decision_by_id(decision_id: str):
     return get_decision_or_404(decision_id)
+
+
+@protected.post("/blocks", status_code=201)
+def block_card_endpoint(request: BlockCardRequest):
+    card_number = validate_card_number(request.card_number.get_secret_value())
+    block = blocklist.block_card(card_number, reason=request.reason, blocked_by="security-manager", hours=request.hours)
+    write_audit_event("card_blocked", block)
+    return block
+
+
+@protected.get("/blocks")
+def list_blocks_endpoint():
+    return {"blocks": blocklist.list_blocks()}
+
+
+@protected.delete("/blocks/{block_id}")
+def unblock_card_endpoint(block_id: str):
+    block = blocklist.unblock(block_id)
+    if block is None:
+        raise HTTPException(status_code=404, detail="Block not found")
+    write_audit_event("card_unblocked", block)
+    return block
+
+
+app.include_router(protected)

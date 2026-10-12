@@ -1,111 +1,88 @@
-# Veloce AI: Roadmap לפרויקט DevOps
+# Veloce AI: Roadmap
 
-**המטרה:** להראות שרשרת DevOps מלאה, מ-commit ועד שירות שרץ ומנוטר ב-Kubernetes,
-על מוצר אמיתי: מנוע החלטות נגד הונאות שרץ on-prem.
-
-סמן `[x]` כשמשימה מסתיימת.
+What is built, and what comes next. The goal of the project is a complete DevOps chain,
+from commit to a service that runs, is secured and is observed on Kubernetes.
 
 ```
-commit → CI (lint, tests, security scan) → Docker image → registry
-       → GitOps (Flux) → Kubernetes → monitoring + alerts → טלפון
+commit → CI (lint, tests, security scans) → image → GitOps → Kubernetes → monitoring → phone alerts
 ```
 
-**באוויר עכשיו (סביבת דמו):**
-- אתר: https://welos-ai.vercel.app
-- API: https://veloce-decision-service.onrender.com/docs
+## Product promises
+
+| Promise | Status | Backed by |
+|---|---|---|
+| Runs on-prem | Live | Hardened container on Kubernetes (k3s) |
+| Decides in under 15 ms | Live (measured, not yet monitored) | Local rules, no network calls in the decision path |
+| Card data never leaves | Live | NetworkPolicy denying egress, local audit log, masked card numbers, no CVV storage |
+| AI reviews every rule change | Planned | Rule-review agent built; not yet a pipeline gate |
+| Control from the phone | Partly | Card blocking API live; phone alerts planned |
 
 ---
 
-## שלב 0: לסגור את מה שפתוח
-- [x] audit מקומי במקום S3 (`app/audit.py`)
-- [x] למחוק את `boto3` מ-`requirements.txt`
-- [x] למחוק את `app/s3_resource_service.py`
-- [x] `.env.example`: `AUDIT_LOG_PATH` במקום משתני AWS
-- [x] `.gitignore`: להוסיף `*.jsonl`
-- [x] `Jenkinsfile` ו-GitHub Actions: למחוק את `ENABLE_S3_AUDIT`
-- [x] README של decision-service: להחליף את ההסבר על S3
-- [ ] טסט ל-audit המקומי
-- [ ] **`.env` שלך: למחוק את מפתחות AWS, ולבטל את ה-Access Key ב-AWS Console**
+## Done
 
-## שלב 1: אבטחת ה-API הציבורי 🔒 (דחוף, ה-API פתוח לכולם)
-- [ ] API key ב-header `X-API-Key`. `/health` ו-`/readiness` נשארים פתוחים
-- [ ] המפתח נשמר כ-Environment Variable ב-Render, לא בקוד
-- [ ] rate limiting: הגבלת מספר בקשות לדקה
-- [ ] טסטים: בלי מפתח מחזיר 401, עם מפתח מחזיר 200
+### Decision service
+- [x] Risk rules: amount, night hours, round amounts, velocity per customer
+- [x] Card validation: Luhn, CVV, expiry, amount > 0, timestamp with timezone
+- [x] Card number masked, CVV never stored
+- [x] Local append-only audit log instead of uploading to S3 inside the request
+- [x] API key authentication, fail closed, constant-time comparison
+- [x] Card blocking by HMAC fingerprint: automatic (score 90+, 24 hours) and manual (`/blocks`)
+- [x] Bugs found and fixed with regression tests: negative amounts, naive timestamps,
+      velocity counting all customers, unauthenticated S3 listing endpoints
+- [x] 22 tests
 
-## שלב 2: קונטיינר 🐳
-- [x] `Dockerfile`: multi-stage, משתמש לא-root, `HEALTHCHECK`
-- [x] `.dockerignore`
-- [x] `docker-compose.yml` (פורט 8001, volume ל-audit)
-- [ ] גרסאות קבועות ב-`requirements.txt` (build שאפשר לשחזר)
+### CI/CD and security
+- [x] Jenkins (self-hosted in Docker) and GitHub Actions: lint, format, tests
+- [x] Security scans on every commit: bandit, pip-audit, gitleaks, trivy
+- [x] Branching: `develop` for work, `main` only through pull requests with green checks
+- [x] Secrets only in the environment, never in git; `.vercelignore` allowlist
 
-## שלב 3: CI מלא 🔁
-- [x] lint, format וטסטים ב-Jenkins וב-GitHub Actions
-- [x] Jenkins רץ לבד על כל commit
-- [ ] סריקת אבטחה לקוד: `bandit`
-- [ ] סריקת ספריות פגיעות: `pip-audit`
-- [ ] בניית Docker image ב-Jenkins
-- [ ] סריקת ה-image: `Trivy`
-- [ ] push ל-registry (GHCR) עם tag לפי commit
-- [ ] Jenkins Configuration as Code (JCasC)
-- [ ] PR ל-`main`, כדי ש-GitHub Actions ירוץ בפעם הראשונה
+### Containers and Kubernetes
+- [x] Multi-stage Docker image, non-root user, healthcheck
+- [x] Kubernetes manifests: Namespace, Deployment, Service, PVC for the audit log
+- [x] Liveness and readiness probes, resource requests and limits
+- [x] Non-root, read-only root filesystem, all capabilities dropped
+- [x] Secret for `API_KEY` and `CARD_HASH_KEY`, created with kubectl
+- [x] NetworkPolicy denying all egress, verified on k3s
 
-## שלב 4: Kubernetes ☸️ (מקומי, על docker-desktop)
-- [ ] `Deployment` עם `livenessProbe` (`/health`) ו-`readinessProbe` (`/readiness`)
-- [ ] `Service`
-- [ ] `ConfigMap` להגדרות, ו-`Secret` ל-API key
-- [ ] `PersistentVolumeClaim` ל-audit log
-- [ ] `resources`: requests ו-limits
-- [ ] Helm chart עם values לסביבות dev ו-prod
-- [ ] Ingress עם HTTPS (cert-manager)
-
-## שלב 5: GitOps עם Flux 🔄
-- [ ] להתקין Flux על ה-cluster
-- [ ] תיקיית `deploy/` עם הגדרות הסביבות
-- [ ] Image Automation: image חדש מעדכן את הגרסה ב-git לבד
-- [ ] פריסה ל-prod רק אחרי אישור PR
-
-## שלב 6: Observability 📊
-- [ ] `/metrics` ל-Prometheus: זמן החלטה (histogram), החלטות לפי סוג
-- [ ] Prometheus ו-Grafana, עם dashboard
-- [ ] SLO: התראה כש-p99 של זמן ההחלטה עובר 15ms
-- [ ] לוגים מובנים (JSON)
-- [ ] Alertmanager → Telegram או Slack בטלפון
-
-## שלב 7: הסוכן ב-pipeline 🤖
-- [x] הסוכן: שלבים 1–4 (diff, מודל, מבנה תשובה, החלטה)
-- [ ] הנחיות אמיתיות (`SYSTEM_PROMPT`)
-- [ ] stage ב-Jenkins שמריץ את הסוכן על כל PR
-- [ ] API key של Anthropic ב-Jenkins Credentials
-
-## שלב 8: ענן אמיתי עם IaC 🏗️ (במקום Render)
-- [ ] Terraform: VM בענן (Oracle Always Free, AWS Free Tier או Hetzner)
-- [ ] k3s על ה-VM
-- [ ] אותו Helm chart ו-Flux מהשלבים הקודמים
-- [ ] דומיין ו-HTTPS
-- [ ] למחוק את Render
-
-## שלב 9: אפליקציה (מינימום לדמו אמין)
-- [ ] מנגנון חסימה אמיתי (היום `is_entity_blocked` מחזיר תמיד `False`)
-- [ ] velocity עם חלון זמן (ביצועים)
-- [ ] להכניס את בדיקת המיקום (geo) לציון
-- [ ] ניקיון: שמות endpoints (`resource_service.py` נמחק)
-
-## שלב 10: פרונט ותיעוד 📄
-- [x] אתר ב-Vercel, מחובר ל-API (`.vercelignore` כרשימה לבנה)
-- [ ] תוכן של Veloce AI במקום הטקסט הכללי
-- [ ] טופס דמו "נסה עסקה" (צריך CORS ב-API)
-- [ ] פריסה אוטומטית של האתר מ-GitHub
-- [ ] README ראשי עם דיאגרמת ארכיטקטורה
-- [ ] צילומי מסך: Jenkins, Grafana, Flux
+### Delivery
+- [x] API demo on Render, website on Vercel
 
 ---
 
-## ✅ מה כבר נעשה
-- CI: lint, format וטסטים ב-GitHub Actions וב-Jenkins
-- Jenkins מקומי ב-Docker, שרץ לבד על כל commit
-- 4 תיקוני באגים ואבטחה עם טסטים: סכום שלילי, timestamp, velocity לפי לקוח, endpoints פתוחים ל-S3
-- audit מקומי במקום S3
-- השירות ארוז ב-Docker (non-root, healthcheck)
-- API באוויר ב-Render, ואתר באוויר ב-Vercel, מחוברים
-- סוכן בדיקת כללים: שלבים 1–4
+## Next
+
+### Before release
+- [ ] `API_KEY` and `CARD_HASH_KEY` on Render, then merge `develop` into `main`
+- [ ] Tag `v2.0.0` and publish a GitHub release
+
+### Shared state
+- [ ] Redis for decisions, velocity and blocks, so they survive restarts
+- [ ] Velocity as a sliding 10-minute window per customer (constant time)
+- [ ] More than one replica
+
+### Observability
+- [ ] `/metrics` for Prometheus: decision latency histogram, decisions by type, blocks
+- [ ] Grafana dashboard
+- [ ] Alert when p99 decision latency exceeds 15 ms
+- [ ] Alertmanager to Telegram: blocked cards, SLO breaches
+
+### Delivery and infrastructure
+- [ ] Build and push images to a registry (GHCR or ECR), scan the image in CI
+- [ ] Rule-review agent as a pipeline gate on pull requests
+- [ ] Helm chart and GitOps with Flux
+- [ ] Terraform for a cloud VM running k3s, state in S3
+- [ ] Pinned dependency versions
+
+### Agents
+- [ ] Fraud analyst agent: statistics computed locally from the audit log (`stats.py`),
+      only aggregated numbers sent to the model, report for the security manager
+- [ ] Run the analyst on Amazon Bedrock and store reports in S3
+- [ ] Agent tests as a Jenkins stage
+- [ ] Orchestrator agent coordinating specialist agents (code, security, fraud impact)
+
+### Product
+- [ ] AI analyst for `review` decisions, asynchronous and without card data
+- [ ] Next.js frontend: live demo form and control center
+- [ ] Audit archive to S3 through Fluent Bit (least-privilege IAM, encryption)

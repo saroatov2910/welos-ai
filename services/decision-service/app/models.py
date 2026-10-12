@@ -14,3 +14,9 @@ class DecideTransactionRequest(BaseModel):
     card_expiry: str
     card_cvv: SecretStr
     timestamp: str
+
+
+class BlockCardRequest(BaseModel):
+    card_number: SecretStr
+    reason: str = Field(min_length=1, max_length=200)
+    hours: int | None = Field(default=None, gt=0, description="Leave empty to block until released")

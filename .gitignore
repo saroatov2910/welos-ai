@@ -17,3 +17,6 @@ __pycache__/
 
 # Local audit logs (contain transaction data)
 *.jsonl
+
+# Editor settings (personal)
+.vscode/
