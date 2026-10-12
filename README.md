@@ -152,6 +152,7 @@ python3.12 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 services/decision-service/   decision API (FastAPI), tests, Dockerfile, docker-compose
 k8s/                         Kubernetes manifests
 agents/rule-review/          AI reviewer for rule changes
+agents/fraud-analyst/        AI analyst: fraud statistics report (in progress)
 jenkins/Dockerfile           Jenkins image with Python, trivy and gitleaks
 Jenkinsfile                  Jenkins pipeline with security scans
 .github/workflows/           GitHub Actions pipeline

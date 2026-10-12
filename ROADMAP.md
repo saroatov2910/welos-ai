@@ -75,6 +75,13 @@ commit → CI (lint, tests, security scans) → image → GitOps → Kubernetes 
 - [ ] Terraform for a cloud VM running k3s, state in S3
 - [ ] Pinned dependency versions
 
+### Agents
+- [ ] Fraud analyst agent: statistics computed locally from the audit log (`stats.py`),
+      only aggregated numbers sent to the model, report for the security manager
+- [ ] Run the analyst on Amazon Bedrock and store reports in S3
+- [ ] Agent tests as a Jenkins stage
+- [ ] Orchestrator agent coordinating specialist agents (code, security, fraud impact)
+
 ### Product
 - [ ] AI analyst for `review` decisions, asynchronous and without card data
 - [ ] Next.js frontend: live demo form and control center
