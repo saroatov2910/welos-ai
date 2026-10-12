@@ -14,6 +14,64 @@ is on how it is built, tested, secured, shipped and run.
 
 > Demo environment only. Use the test card `4242 4242 4242 4242`.
 
+## System overview
+
+```mermaid
+flowchart TB
+    dev["Developer"]
+
+    subgraph git["GitHub"]
+        develop["develop branch"]
+        main["main branch"]
+        develop -->|"pull request"| main
+    end
+
+    subgraph ci["CI: every commit"]
+        jenkins["Jenkins<br/>lint, format, 22 tests"]
+        scans["Security scans<br/>bandit, pip-audit,<br/>gitleaks, trivy"]
+        gha["GitHub Actions<br/>on pull requests"]
+        jenkins --> scans
+    end
+
+    subgraph cd["Delivery"]
+        render["Render<br/>API demo"]
+        vercel["Vercel<br/>website"]
+    end
+
+    subgraph k8s["Customer network: Kubernetes k3s, namespace veloce"]
+        pod["decision-service pod<br/>non-root, read-only"]
+        secret["Secret<br/>API_KEY, CARD_HASH_KEY"]
+        pvc[("Audit log<br/>PVC")]
+        np["NetworkPolicy<br/>no outbound traffic"]
+        secret --> pod
+        pod --> pvc
+        np -.-> pod
+    end
+
+    subgraph agents["AI agents"]
+        reviewer["Rule reviewer<br/>reads code diffs"]
+        analyst["Fraud analyst<br/>stats computed locally"]
+    end
+
+    store["Store / bank<br/>checkout"]
+    model["AI model<br/>aggregated numbers only"]
+
+    dev -->|push| develop
+    develop --> jenkins
+    main --> gha
+    main -->|"auto deploy"| render
+    main --> vercel
+    main -->|"kubectl apply"| pod
+    store -->|"HTTPS + X-API-Key"| pod
+    pod -->|"accept / review / reject"| store
+    develop -.-> reviewer
+    pvc --> analyst
+    reviewer -.-> model
+    analyst -.-> model
+```
+
+Solid lines run today; dotted lines are partly built or planned.
+
 ## The problem
 
 Today a card payment is usually sent to a fraud engine in a remote cloud. That adds
