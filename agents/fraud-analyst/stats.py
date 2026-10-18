@@ -80,6 +80,17 @@ def amount_stats(decisions: list[dict]) -> dict:
     return result
 
 
+def score_stats(decisions: list[dict]) -> dict:
+    """Average and highest risk score across all decisions."""
+    scores = [d["risk_score"] for d in decisions]
+    if not scores:
+        return {"average_score": 0.0, "highest_score": 0}
+    return {
+        "average_score": round(sum(scores) / len(scores), 1),
+        "highest_score": max(scores),
+    }
+
+
 def band_stats(decisions: list[dict]) -> dict:
     """Transactions and rejections in each amount band."""
     result = {band: {"transactions": 0, "rejected": 0} for band in BANDS}
@@ -120,6 +131,7 @@ def compute_stats(events: list[dict]) -> dict:
         "period": time_period(decisions),
         "currencies": currencies,
         "totals": count_decisions(decisions),
+        "risk_scores": score_stats(decisions),
         "fraud_caught": {
             "rejected_transactions": sum(
                 1 for d in decisions if d["decision"] == "reject"

@@ -1,0 +1,30 @@
+# Traefik middlewares: run in front of decision-service, before a request reaches Python.
+# Attached to the Ingress with the router.middlewares annotation in ingress.yaml.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: ratelimit
+  namespace: veloce
+spec:
+  # Limit each client IP. Requests over the limit get 429 Too Many Requests
+  # and never reach the service, so a flood cannot slow down real decisions.
+  rateLimit:
+    average: 10 # requests per period, on average
+    period: 1s
+    burst: 20 # short spikes allowed above the average
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: security-headers
+  namespace: veloce
+spec:
+  # Security headers added to every response.
+  headers:
+    stsSeconds: 31536000 # HSTS: browsers use only HTTPS for this host for a year
+    stsIncludeSubdomains: true
+    contentTypeNosniff: true # X-Content-Type-Options: nosniff
+    frameDeny: true # X-Frame-Options: DENY, the API cannot be embedded in another site
+    referrerPolicy: no-referrer # never leak URLs to other sites
+    customResponseHeaders:
+      Server: "" # hide the server name and version

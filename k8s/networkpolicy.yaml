@@ -13,3 +13,27 @@ spec:
   policyTypes:
     - Egress
   egress: []
+---
+# Only Traefik may reach decision-service. Any other pod in the cluster is refused,
+# so nobody can skip the HTTPS, rate limit and security headers on the Ingress.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: decision-service-allow-traefik-only
+  namespace: veloce
+spec:
+  podSelector:
+    matchLabels:
+      app: decision-service
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - port: http # the container port name in deployment.yaml (8000)

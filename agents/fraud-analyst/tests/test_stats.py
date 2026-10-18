@@ -18,12 +18,15 @@ def test_load_events_skips_empty_lines(tmp_path):
     assert len(load_events(str(log))) == 2
 
 
-def _decision(decision, amount, reasons=(), timestamp="2026-10-11T10:00:00Z"):
+def _decision(
+    decision, amount, reasons=(), timestamp="2026-10-11T10:00:00Z", risk_score=0
+):
     return {
         "event": "decision_created",
         "payload": {
             "decision": decision,
             "amount": amount,
+            "risk_score": risk_score,
             "currency": "USD",
             "reasons": list(reasons),
             "timestamp": timestamp,
@@ -33,12 +36,13 @@ def _decision(decision, amount, reasons=(), timestamp="2026-10-11T10:00:00Z"):
 
 EVENTS = [
     _decision("accept", 120),
-    _decision("review", 1200, ["amount_high", "round_amount_pattern"]),
+    _decision("review", 1200, ["amount_high", "round_amount_pattern"], risk_score=55),
     _decision(
         "reject",
         3500,
         ["amount_extremely_high", "off_hours_transaction"],
         "2026-10-11T02:00:00Z",
+        risk_score=95,
     ),
     {"event": "card_blocked", "payload": {"blocked_by": "system"}},
     {"event": "card_blocked", "payload": {"blocked_by": "security-manager"}},
@@ -87,3 +91,16 @@ def test_empty_log_gives_zeros_not_errors():
     assert stats["totals"]["transactions_checked"] == 0
     assert stats["totals"]["reject_rate_percent"] == 0.0
     assert stats["period"] == {"from": None, "to": None}
+
+
+def test_risk_scores_average_and_highest():
+    scores = compute_stats(EVENTS)["risk_scores"]
+
+    assert scores == {"average_score": 50.0, "highest_score": 95}
+
+
+def test_risk_scores_empty_log():
+    assert compute_stats([])["risk_scores"] == {
+        "average_score": 0.0,
+        "highest_score": 0,
+    }
