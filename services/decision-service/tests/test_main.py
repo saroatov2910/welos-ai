@@ -140,6 +140,12 @@ def test_protected_endpoint_rejects_wrong_api_key():
     assert response.status_code == 401
 
 
+def test_protected_endpoint_rejects_non_ascii_api_key():
+    response = TestClient(app, headers={"X-API-Key": "קוד".encode()}).get("/decisions/any")
+
+    assert response.status_code == 401
+
+
 def test_service_fails_closed_without_configured_key(monkeypatch):
     monkeypatch.delenv("API_KEY")
 
