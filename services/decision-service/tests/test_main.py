@@ -50,6 +50,13 @@ def test_decide_transaction_and_fetch_by_id():
     assert get_response.json()["transaction_id"] == "tx-001"
 
 
+def test_decide_transaction_rejects_card_number_with_letters():
+    response = _decide(card_number="4242-abc-4242-xyz-4242-4242")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid card number format"
+
+
 def test_decide_transaction_rejects_invalid_cvv():
     response = _decide(card_cvv="12a")
 
