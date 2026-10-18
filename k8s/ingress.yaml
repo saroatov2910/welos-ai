@@ -1,0 +1,27 @@
+# HTTPS entry point: https://veloce.localhost:8443 -> decision-service.
+# Only the TLS entry point (websecure) is used, so the API is never served over plain HTTP.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: decision-service
+  namespace: veloce
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - veloce.localhost
+      secretName: decision-service-tls
+  rules:
+    - host: veloce.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: decision-service
+                port:
+                  name: http
