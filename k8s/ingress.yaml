@@ -8,6 +8,8 @@ metadata:
   annotations:
     traefik.ingress.kubernetes.io/router.entrypoints: websecure
     traefik.ingress.kubernetes.io/router.tls: "true"
+    # Middlewares from middlewares.yaml, as <namespace>-<name>@kubernetescrd.
+    traefik.ingress.kubernetes.io/router.middlewares: veloce-ratelimit@kubernetescrd
 spec:
   ingressClassName: traefik
   tls:
