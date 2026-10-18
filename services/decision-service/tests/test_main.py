@@ -4,6 +4,7 @@ from app import blocklist
 from app.main import app
 from app.services import decisions_store
 from tests.conftest import TEST_API_KEY
+from tests.data import MASTERCARD, VISA, transaction
 
 client = TestClient(app, headers={"X-API-Key": TEST_API_KEY})
 
@@ -11,6 +12,10 @@ client = TestClient(app, headers={"X-API-Key": TEST_API_KEY})
 def setup_function():
     decisions_store.clear()
     blocklist.clear()
+
+
+def _decide(**changes):
+    return client.post("/decide_transaction", json=transaction(**changes))
 
 
 def test_health_returns_ok():
@@ -28,18 +33,7 @@ def test_readiness_returns_ready_true():
 
 
 def test_decide_transaction_and_fetch_by_id():
-    payload = {
-        "customer_id": "cust-1",
-        "transaction_id": "tx-001",
-        "amount": 125.5,
-        "currency": "USD",
-        "card_number": "4242 4242 4242 4242",
-        "card_cvv": "123",
-        "card_expiry": "12/99",
-        "timestamp": "2026-10-04T10:00:00Z",
-    }
-
-    create_response = client.post("/decide_transaction", json=payload)
+    create_response = _decide(transaction_id="tx-001", card_number="4242 4242 4242 4242")
 
     assert create_response.status_code == 200
     body = create_response.json()
@@ -57,36 +51,14 @@ def test_decide_transaction_and_fetch_by_id():
 
 
 def test_decide_transaction_rejects_invalid_cvv():
-    payload = {
-        "customer_id": "cust-1",
-        "transaction_id": "tx-002",
-        "amount": 80.0,
-        "currency": "USD",
-        "card_number": "4242424242424242",
-        "card_cvv": "12a",
-        "card_expiry": "12/99",
-        "timestamp": "2026-10-04T10:00:00Z",
-    }
-
-    response = client.post("/decide_transaction", json=payload)
+    response = _decide(card_cvv="12a")
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Invalid CVV"
 
 
 def test_decide_transaction_rejects_invalid_expiry_format():
-    payload = {
-        "customer_id": "cust-1",
-        "transaction_id": "tx-003",
-        "amount": 80.0,
-        "currency": "USD",
-        "card_number": "4242424242424242",
-        "card_cvv": "123",
-        "card_expiry": "13/30",
-        "timestamp": "2026-10-04T10:00:00Z",
-    }
-
-    response = client.post("/decide_transaction", json=payload)
+    response = _decide(card_expiry="13/30")
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Invalid card expiry format, expected MM/YY"
@@ -100,18 +72,7 @@ def test_get_decision_by_id_returns_404_when_missing():
 
 
 def test_decide_transaction_returns_review_for_elevated_risk():
-    payload = {
-        "customer_id": "cust-1",
-        "transaction_id": "tx-004",
-        "amount": 1200.0,
-        "currency": "USD",
-        "card_number": "4242424242424242",
-        "card_cvv": "123",
-        "card_expiry": "12/99",
-        "timestamp": "2026-10-04T10:00:00Z",
-    }
-
-    response = client.post("/decide_transaction", json=payload)
+    response = _decide(amount=1200.0)
 
     assert response.status_code == 200
     body = response.json()
@@ -121,18 +82,7 @@ def test_decide_transaction_returns_review_for_elevated_risk():
 
 
 def test_decide_transaction_returns_reject_for_high_risk():
-    payload = {
-        "customer_id": "cust-1",
-        "transaction_id": "tx-005",
-        "amount": 3500.0,
-        "currency": "USD",
-        "card_number": "4242424242424242",
-        "card_cvv": "123",
-        "card_expiry": "12/99",
-        "timestamp": "2026-10-04T02:10:00Z",
-    }
-
-    response = client.post("/decide_transaction", json=payload)
+    response = _decide(amount=3500.0, timestamp="2026-10-04T02:10:00Z")
 
     assert response.status_code == 200
     body = response.json()
@@ -142,37 +92,14 @@ def test_decide_transaction_returns_reject_for_high_risk():
 
 
 def test_decide_transaction_allows_any_currency_when_whitelist_disabled():
-    payload = {
-        "customer_id": "cust-1",
-        "transaction_id": "tx-006",
-        "amount": 150.0,
-        "currency": "XYZ",
-        "card_number": "4242424242424242",
-        "card_cvv": "123",
-        "card_expiry": "12/99",
-        "timestamp": "2026-10-04T10:00:00Z",
-    }
-
-    response = client.post("/decide_transaction", json=payload)
+    response = _decide(currency="XYZ")
 
     assert response.status_code == 200
-    body = response.json()
-    assert "unsupported_currency" not in body["reasons"]
+    assert "unsupported_currency" not in response.json()["reasons"]
 
 
 def test_decide_transaction_rejects_timestamp_without_timezone():
-    payload = {
-        "customer_id": "cust-1",
-        "transaction_id": "tx-007",
-        "amount": 100.0,
-        "currency": "USD",
-        "card_number": "4242424242424242",
-        "card_cvv": "123",
-        "card_expiry": "12/99",
-        "timestamp": "2026-10-04T10:00:00",
-    }
-
-    response = client.post("/decide_transaction", json=payload)
+    response = _decide(timestamp="2026-10-04T10:00:00")
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Timestamp must include timezone (e.g. Z)"
@@ -183,36 +110,20 @@ def test_s3_debug_endpoints_are_not_exposed():
     assert client.get("/s3/files", params={"bucket_name": "any"}).status_code == 404
 
 
-def _decide(transaction_id, customer_id, timestamp):
-    return client.post(
-        "/decide_transaction",
-        json={
-            "customer_id": customer_id,
-            "transaction_id": transaction_id,
-            "amount": 10.0,
-            "currency": "USD",
-            "card_number": "4242424242424242",
-            "card_cvv": "123",
-            "card_expiry": "12/99",
-            "timestamp": timestamp,
-        },
-    )
-
-
 def test_velocity_ignores_other_customers():
     for i in range(3):
-        _decide(f"other-{i}", "cust-A", "2026-10-04T10:00:00Z")
+        _decide(transaction_id=f"other-{i}", customer_id="cust-A")
 
-    body = _decide("tx-v1", "cust-B", "2026-10-04T10:05:00Z").json()
+    body = _decide(transaction_id="tx-v1", customer_id="cust-B", timestamp="2026-10-04T10:05:00Z").json()
 
     assert "too_many_attempts_10m" not in body["reasons"]
 
 
 def test_velocity_flags_same_customer():
     for i in range(3):
-        _decide(f"same-{i}", "cust-A", "2026-10-04T10:00:00Z")
+        _decide(transaction_id=f"same-{i}", customer_id="cust-A")
 
-    body = _decide("tx-v2", "cust-A", "2026-10-04T10:05:00Z").json()
+    body = _decide(transaction_id="tx-v2", customer_id="cust-A", timestamp="2026-10-04T10:05:00Z").json()
 
     assert "too_many_attempts_10m" in body["reasons"]
 
@@ -239,25 +150,14 @@ def test_health_is_open_without_api_key():
     assert TestClient(app).get("/health").status_code == 200
 
 
-def _pay(transaction_id, amount, timestamp, card_number="4242424242424242"):
-    return client.post(
-        "/decide_transaction",
-        json={
-            "customer_id": "cust-1",
-            "transaction_id": transaction_id,
-            "amount": amount,
-            "currency": "USD",
-            "card_number": card_number,
-            "card_cvv": "123",
-            "card_expiry": "12/99",
-            "timestamp": timestamp,
-        },
-    ).json()
+def _steal():
+    """A high-risk payment (large amount at night) that gets the card blocked."""
+    return _decide(transaction_id="thief-1", amount=3500.0, timestamp="2026-10-04T02:00:00Z").json()
 
 
 def test_high_risk_reject_blocks_the_card():
-    first = _pay("thief-1", 3500.0, "2026-10-04T02:00:00Z")
-    second = _pay("thief-2", 10.0, "2026-10-04T12:00:00Z")
+    first = _steal()
+    second = _decide(transaction_id="thief-2", timestamp="2026-10-04T12:00:00Z").json()
 
     assert first["decision"] == "reject"
     assert first["card_blocked"] is True
@@ -266,26 +166,26 @@ def test_high_risk_reject_blocks_the_card():
 
 
 def test_block_does_not_affect_other_cards():
-    _pay("thief-1", 3500.0, "2026-10-04T02:00:00Z")
+    _steal()
 
-    other = _pay("other-1", 10.0, "2026-10-04T12:00:00Z", card_number="5555555555554444")
+    other = _decide(transaction_id="other-1", card_number=MASTERCARD).json()
 
     assert other["decision"] == "accept"
 
 
 def test_manual_block_list_and_release():
-    created = client.post("/blocks", json={"card_number": "4242424242424242", "reason": "reported stolen"})
+    created = client.post("/blocks", json={"card_number": VISA, "reason": "reported stolen"})
     assert created.status_code == 201
     block = created.json()
     assert block["card_last4"] == "4242"
     assert block["blocked_by"] == "security-manager"
-    assert "4242424242424242" not in created.text
+    assert VISA not in created.text
 
-    assert _pay("tx-b1", 10.0, "2026-10-04T12:00:00Z")["reasons"] == ["card_blocked"]
+    assert _decide(transaction_id="tx-b1").json()["reasons"] == ["card_blocked"]
     assert [b["block_id"] for b in client.get("/blocks").json()["blocks"]] == [block["block_id"]]
 
     assert client.delete(f"/blocks/{block['block_id']}").status_code == 200
-    assert _pay("tx-b2", 10.0, "2026-10-04T12:00:00Z")["decision"] == "accept"
+    assert _decide(transaction_id="tx-b2").json()["decision"] == "accept"
 
 
 def test_unblock_unknown_block_returns_404():
@@ -295,6 +195,6 @@ def test_unblock_unknown_block_returns_404():
 def test_blocking_fails_closed_without_hash_key(monkeypatch):
     monkeypatch.delenv("CARD_HASH_KEY")
 
-    response = client.post("/blocks", json={"card_number": "4242424242424242", "reason": "x"})
+    response = client.post("/blocks", json={"card_number": VISA, "reason": "x"})
 
     assert response.status_code == 503
