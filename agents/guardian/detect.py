@@ -52,7 +52,7 @@ def crashed_recently(last_crash: dict, now: datetime | None = None) -> bool:
     finished_at = last_crash.get("finishedAt")
     if not finished_at:
         return False
-    finished = datetime.fromisoformat(finished_at.replace("Z", "+00:00"))
+    finished = datetime.fromisoformat(finished_at)
     return (now or datetime.now(UTC)) - finished <= RECENT_CRASH_WINDOW
 
 

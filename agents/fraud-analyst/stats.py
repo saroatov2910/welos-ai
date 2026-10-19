@@ -111,7 +111,7 @@ def reason_counts(decisions: list[dict]) -> dict:
 def hourly_counts(decisions: list[dict]) -> dict:
     """Transactions per hour of the day (UTC), only hours that had traffic."""
     hours = Counter(
-        datetime.fromisoformat(d["timestamp"].replace("Z", "+00:00")).hour
+        datetime.fromisoformat(d["timestamp"]).hour
         for d in decisions
     )
     return {f"{hour:02d}:00": hours[hour] for hour in sorted(hours)}

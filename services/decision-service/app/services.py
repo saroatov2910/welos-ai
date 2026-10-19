@@ -61,7 +61,7 @@ def mask_card_number(card_number: str) -> str:
 
 
 def _digits_only(value: str) -> str:
-    return re.sub(r"\D", "", value)
+    return re.sub(r"[ -]", "", value)
 
 
 def _is_luhn_valid(card_number: str) -> bool:
