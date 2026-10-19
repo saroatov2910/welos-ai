@@ -1,14 +1,22 @@
-name: decision-service CI
+name: CI
 
+# Runs when anything the system is built from changes: service code, agents,
+# Kubernetes manifests, cluster config, or this workflow itself.
 on:
   push:
     branches: [main]
     paths:
       - "services/decision-service/**"
+      - "agents/**"
+      - "k8s/**"
+      - "k3d/**"
       - ".github/workflows/decision-service-ci.yml"
   pull_request:
     paths:
       - "services/decision-service/**"
+      - "agents/**"
+      - "k8s/**"
+      - "k3d/**"
       - ".github/workflows/decision-service-ci.yml"
 
 concurrency:
@@ -19,7 +27,7 @@ permissions:
   contents: read
 
 jobs:
-  lint-and-test:
+  decision-service:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -46,3 +54,43 @@ jobs:
 
       - name: Test
         run: pytest -q
+
+  agents:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false # one failing agent does not hide the results of the others
+      matrix:
+        agent: [deploy-verifier, fraud-analyst, guardian]
+    defaults:
+      run:
+        working-directory: agents/${{ matrix.agent }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test tools
+        run: pip install pytest ruff
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Test
+        run: pytest -q
+
+  k8s-manifests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Checks every manifest against the Kubernetes API schema of the cluster version,
+      # plus the Traefik and cert-manager CRD schemas. A typo fails here, not at kubectl apply.
+      - name: Validate with kubeconform
+        run: |
+          docker run --rm -v "$PWD/k8s:/k8s:ro" ghcr.io/yannh/kubeconform:v0.7.0 \
+            -strict -summary -kubernetes-version 1.35.0 \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            /k8s
