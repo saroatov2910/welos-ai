@@ -21,4 +21,17 @@ RUN set -eux; \
       | tar -xz -C /usr/local/bin gitleaks; \
     trivy --version; gitleaks version
 
+# Docker CLI only (the client, not the daemon). Jenkins sends build commands
+# to the host's Docker through the mounted /var/run/docker.sock.
+ARG DOCKER_VERSION=29.2.0
+RUN set -eux; \
+    case "$(dpkg --print-architecture)" in \
+      amd64) docker_arch=x86_64 ;; \
+      arm64) docker_arch=aarch64 ;; \
+      *) echo "unsupported arch"; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://download.docker.com/linux/static/stable/${docker_arch}/docker-${DOCKER_VERSION}.tgz" \
+      | tar -xz -C /usr/local/bin --strip-components=1 docker/docker; \
+    docker --version
+
 USER jenkins
