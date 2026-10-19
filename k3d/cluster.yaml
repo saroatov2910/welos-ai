@@ -1,0 +1,15 @@
+# The local Kubernetes cluster as code.
+# Create:  k3d cluster create --config k3d/cluster.yaml
+# Delete:  k3d cluster delete veloce
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: veloce
+servers: 1
+agents: 2 # worker nodes, so a pod can move when a node fails
+image: rancher/k3s:v1.35.5-k3s1 # pinned: every cluster gets the same Kubernetes version
+ports:
+  # https://veloce.localhost:8443 -> Traefik websecure (443). No plain HTTP port is opened.
+  - port: 8443:443
+    nodeFilters:
+      - loadbalancer
