@@ -34,4 +34,17 @@ RUN set -eux; \
       | tar -xz -C /usr/local/bin --strip-components=1 docker/docker; \
     docker --version
 
+# kubectl (same version as the cluster) and k3d, to deploy to the local cluster.
+# kubectl is checked against its published SHA-256, so a tampered download fails the build.
+ARG KUBECTL_VERSION=1.35.5
+ARG K3D_VERSION=5.9.0
+RUN set -eux; \
+    arch="$(dpkg --print-architecture)"; \
+    curl -fsSLo /usr/local/bin/kubectl "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/${arch}/kubectl"; \
+    echo "$(curl -fsSL "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/${arch}/kubectl.sha256")  /usr/local/bin/kubectl" \
+      | sha256sum --check; \
+    curl -fsSLo /usr/local/bin/k3d "https://github.com/k3d-io/k3d/releases/download/v${K3D_VERSION}/k3d-linux-${arch}"; \
+    chmod +x /usr/local/bin/kubectl /usr/local/bin/k3d; \
+    kubectl version --client; k3d version
+
 USER jenkins
