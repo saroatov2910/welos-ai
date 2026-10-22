@@ -61,12 +61,19 @@ def container_problem(
 ) -> tuple[str, str] | None:
     """(reason, message) if the container has a current problem, else None."""
     waiting = container.get("state", {}).get("waiting", {})
+    terminated = container.get("state", {}).get("terminated", {})
     last_crash = container.get("lastState", {}).get("terminated", {})
     restarts = container.get("restartCount", 0)
     recent = crashed_recently(last_crash, now)
 
     if waiting and waiting.get("reason") not in STARTING_REASONS:
         reason, message = waiting.get("reason", "Waiting"), waiting.get("message", "")
+    # Between restarts a crashing container is briefly "terminated", not "waiting".
+    elif terminated and terminated.get("exitCode", 0) != 0:
+        reason, message = (
+            terminated.get("reason", "Error"),
+            f"exited with code {terminated.get('exitCode')}",
+        )
     elif restarts > RESTART_LIMIT and recent:
         reason, message = (
             last_crash.get("reason", "Restarting"),
