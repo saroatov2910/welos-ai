@@ -14,6 +14,7 @@ pipeline {
 
     environment {
         SERVICE_DIR = 'services/decision-service'
+        IMAGE = 'veloce/decision-service'
     }
 
     stages {
@@ -90,6 +91,18 @@ pipeline {
                       --skip-dirs "${SERVICE_DIR}/.venv" \
                       "${SERVICE_DIR}"
                 '''
+            }
+        }
+
+        // Every image is tagged with its commit, so each version has its own name
+        // and a rollback really returns to the previous code.
+        stage('Build image') {
+            steps {
+                script {
+                    env.IMAGE_TAG = sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()
+                }
+                sh 'docker build -t "$IMAGE:$IMAGE_TAG" "$SERVICE_DIR"'
+                echo "Built ${env.IMAGE}:${env.IMAGE_TAG}"
             }
         }
 
