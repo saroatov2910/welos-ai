@@ -106,6 +106,18 @@ pipeline {
             }
         }
 
+                // The image never reaches the cluster with a HIGH or CRITICAL vulnerability that has a fix.
+        stage('Scan image') {
+            steps {
+                sh '''
+                    trivy image --quiet --cache-dir "$JENKINS_HOME/.cache/trivy" \
+                      --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
+                      "$IMAGE:$IMAGE_TAG"
+                '''
+            }
+        }
+
+
         // Proves Jenkins can reach the cluster with its own least-privilege identity.
         stage('Cluster access') {
             steps {
