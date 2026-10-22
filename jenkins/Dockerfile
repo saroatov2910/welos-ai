@@ -1,8 +1,8 @@
-FROM jenkins/jenkins:lts-jdk21
+FROM jenkins/jenkins:2.580.1-lts-jdk21
 
 USER root
 
-RUN apt-get update && apt-get install -y python3 python3-venv python3-pip git curl \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y python3 python3-venv python3-pip git curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Security scanners used by the pipeline, pinned to exact versions.
