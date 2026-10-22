@@ -118,14 +118,16 @@ pipeline {
         }
 
 
-        // Proves Jenkins can reach the cluster with its own least-privilege identity.
-        stage('Cluster access') {
+      // Moves the scanned image into the cluster and rolls the Deployment to it.
+        // Kubernetes starts the new pod first and removes the old one only when the new one is ready.
+        stage('Deploy') {
             steps {
+                sh 'k3d image import "$IMAGE:$IMAGE_TAG" -c veloce'
                 withCredentials([file(credentialsId: 'k3d-veloce-kubeconfig', variable: 'KUBECONFIG')]) {
-                    sh 'kubectl get pods -n veloce'
+                    sh 'kubectl -n veloce set image deployment/decision-service decision-service="$IMAGE:$IMAGE_TAG"'
                 }
             }
-        }
+        } 
     }
 
     post {
