@@ -92,6 +92,15 @@ pipeline {
                 '''
             }
         }
+
+        // Proves Jenkins can reach the cluster with its own least-privilege identity.
+        stage('Cluster access') {
+            steps {
+                withCredentials([file(credentialsId: 'k3d-veloce-kubeconfig', variable: 'KUBECONFIG')]) {
+                    sh 'kubectl get pods -n veloce'
+                }
+            }
+        }
     }
 
     post {
