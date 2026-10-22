@@ -1,0 +1,32 @@
+# Jenkins as code: how the on-prem CI/CD server runs.
+# Start:  docker compose -f jenkins/docker-compose.yml up -d --build
+# Stop:   docker compose -f jenkins/docker-compose.yml down   (jobs stay in the jenkins_home volume)
+services:
+  jenkins:
+    build: .
+    image: welos-jenkins:latest
+    container_name: jenkins
+    restart: unless-stopped
+    ports:
+      # Only this computer can open Jenkins. It is not reachable from the network.
+      - "127.0.0.1:8080:8080"
+    volumes:
+      # Jobs, build history, plugins and credentials survive restarts and upgrades.
+      - jenkins_home:/var/jenkins_home
+      # Lets the pipeline run docker build. Security note: access to this socket is
+      # root on the host, acceptable for a local lab; production would use rootless BuildKit.
+      - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      # The socket is owned by group 0; the jenkins user joins it to use Docker.
+      - "0"
+    networks:
+      # Same network as the k3d cluster, so kubectl can reach the Kubernetes API.
+      - k3d-veloce
+
+volumes:
+  jenkins_home:
+    external: true # created before this file existed; never deleted by compose down
+
+networks:
+  k3d-veloce:
+    external: true # created by k3d cluster create
