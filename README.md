@@ -27,9 +27,9 @@ flowchart TB
     end
 
     subgraph ci["CI: every commit"]
-        jenkins["Jenkins<br/>lint, format, 22 tests"]
+        jenkins["Jenkins<br/>lint, format, 24 tests"]
         scans["Security scans<br/>bandit, pip-audit,<br/>gitleaks, trivy"]
-        gha["GitHub Actions<br/>on pull requests"]
+        gha["GitHub Actions<br/>service + agent tests,<br/>k8s manifest validation"]
         jenkins --> scans
     end
 
@@ -39,16 +39,20 @@ flowchart TB
     end
 
     subgraph k8s["Customer network: Kubernetes k3s, namespace veloce"]
+        traefik["Traefik Ingress<br/>TLS, rate limit,<br/>security headers"]
         pod["decision-service pod<br/>non-root, read-only"]
         secret["Secret<br/>API_KEY, CARD_HASH_KEY"]
         pvc[("Audit log<br/>PVC")]
-        np["NetworkPolicy<br/>no outbound traffic"]
+        np["NetworkPolicy<br/>in: Traefik only<br/>out: nothing"]
+        traefik --> pod
         secret --> pod
         pod --> pvc
         np -.-> pod
     end
 
-    subgraph agents["AI agents"]
+    subgraph agents["Agents"]
+        verifier["Deploy verifier<br/>drift detection"]
+        guardian["Guardian<br/>detects failing pods"]
         reviewer["Rule reviewer<br/>reads code diffs"]
         analyst["Fraud analyst<br/>stats computed locally"]
     end
@@ -58,12 +62,15 @@ flowchart TB
 
     dev -->|push| develop
     develop --> jenkins
-    main --> gha
+    develop -->|"pull request"| gha
     main -->|"auto deploy"| render
     main --> vercel
-    main -->|"kubectl apply"| pod
-    store -->|"HTTPS + X-API-Key"| pod
+    main -.->|"manual kubectl apply"| traefik
+    store -->|"HTTPS + X-API-Key"| traefik
     pod -->|"accept / review / reject"| store
+    verifier --> render
+    verifier --> pod
+    guardian --> pod
     develop -.-> reviewer
     pvc --> analyst
     reviewer -.-> model
@@ -82,7 +89,7 @@ latency at the checkout and sends card data across the public internet.
 | Promise | Status | How it is backed today |
 |---|---|---|
 | Runs on-prem | Live | Hardened container on Kubernetes (k3s): non-root, read-only filesystem, probes, resource limits |
-| Decides in under 15 ms | Live | Local rule engine, no network calls in the decision path (measured below 1 ms) |
+| Decides in under 15 ms | Built, not yet load-tested | Local rule engine, no network calls in the decision path; a k6 load test with a p99 target is next |
 | Card data never leaves | Live | NetworkPolicy denies all outbound traffic from the pod; local audit log; card number masked; CVV never stored; API key required |
 | AI reviews every rule change | Planned | Rule-review agent reads the diff and flags critical findings; not yet a pipeline gate |
 | Control from the phone | Partly | Card blocking API is live; alerts to the phone are planned |
@@ -123,45 +130,84 @@ same code, the code cannot be turned back into the number, and only blocked card
 flowchart LR
     dev[Developer] -->|push| develop[develop branch]
     develop -->|polls every 5 min| jenkins[Jenkins]
-    jenkins --> checks[lint, format,<br/>22 tests]
+    jenkins --> checks[lint, format,<br/>24 tests]
     checks --> scans[bandit, pip-audit,<br/>gitleaks, trivy]
     develop -->|pull request| pr[PR to main]
-    pr --> gha[GitHub Actions<br/>lint, format, tests]
+    pr --> gha[GitHub Actions<br/>service, 3 agents,<br/>kubeconform]
     gha -->|merge| main[main branch]
     main -->|auto deploy| render[Render demo]
-    main -.->|kubectl apply| k8s[Kubernetes k3s]
+    main -.->|manual kubectl apply| k8s[Kubernetes k3s]
+    render --> verify[Deploy verifier<br/>live API = code?]
 ```
 
 - **Two branches:** `develop` is where work happens and Jenkins checks every commit.
-  `main` is stable; it changes only through a pull request with green checks.
-- **DevSecOps:** every commit is scanned for vulnerable code (bandit), vulnerable
+  `main` is stable and changes through pull requests; enforcing green checks with a
+  branch ruleset is the next step.
+- **What GitHub Actions checks:** the decision service (lint, format, tests), each agent in
+  a parallel matrix job, and every Kubernetes manifest against the API schema of the
+  cluster version with kubeconform, so a typo fails the pull request instead of `kubectl apply`.
+- **DevSecOps:** Jenkins scans every commit for vulnerable code (bandit), vulnerable
   dependencies (pip-audit), secrets anywhere in git history (gitleaks), and
   vulnerabilities or misconfigurations in files and the Dockerfile (trivy).
-- **Fail fast:** a red build on `develop` never reaches production.
+- **Pinned versions:** application dependencies and CI tools use exact versions, so a
+  build gives the same result today and next month, locally and in CI.
+- **Drift detection:** the deploy verifier compares the endpoints the live API serves with
+  the endpoints in the code. It found the Render demo deploying from an old branch,
+  43 commits behind `main`; after the fix it passes 5/5 checks.
 
 ## Kubernetes
 
-Manifests in [`k8s/`](k8s/): Namespace, Deployment, Service, PersistentVolumeClaim for the
-audit log, and a NetworkPolicy.
+The cluster itself is code in [`k3d/cluster.yaml`](k3d/cluster.yaml): one server, two
+agents, a pinned k3s version, and only port 8443 (HTTPS) opened.
+
+| Manifest | What it does |
+|---|---|
+| `namespace.yaml`, `deployment.yaml`, `service.yaml` | The service, hardened: non-root, read-only filesystem, probes, limits, PVC for the audit log |
+| `certificate.yaml` | cert-manager: a local CA and a TLS certificate for `veloce.localhost` |
+| `ingress.yaml` | Traefik on HTTPS only; plain HTTP is never served |
+| `middlewares.yaml` | Rate limit (10 req/s per client, burst 20, then 429) and security headers (HSTS, nosniff, frame deny, no server header) |
+| `networkpolicy.yaml` | In: only Traefik may reach the pod. Out: nothing may leave it |
 
 ```bash
-k3d cluster create veloce
+# 1. Cluster and cert-manager
+k3d cluster create --config k3d/cluster.yaml
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.21.2/cert-manager.yaml
+kubectl wait --for=condition=Available deployment --all -n cert-manager --timeout=180s
+
+# 2. Image and secret
 docker build -t veloce/decision-service:dev services/decision-service
 k3d image import veloce/decision-service:dev -c veloce
 kubectl apply -f k8s/namespace.yaml
 kubectl create secret generic decision-service-secrets -n veloce \
   --from-literal=API_KEY="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')" \
   --from-literal=CARD_HASH_KEY="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+
+# 3. Everything else
 kubectl apply -f k8s/
-kubectl port-forward -n veloce svc/decision-service 8002:80
+kubectl -n veloce rollout status deployment/decision-service
+
+# 4. Trust the local CA and call the API over HTTPS
+kubectl get secret veloce-local-ca -n cert-manager -o jsonpath='{.data.ca\.crt}' | base64 -d > veloce-ca.crt
+curl --cacert veloce-ca.crt https://veloce.localhost:8443/health
 ```
 
-Prove that nothing can leave the pod:
+Prove each security layer:
 
 ```bash
+# HTTPS only: plain HTTP is not served
+curl -s -o /dev/null -w "%{http_code}\n" http://veloce.localhost:8443/health        # 404
+
+# Rate limit: 200 fast requests, the extra ones get 429
+for i in $(seq 200); do curl -s -o /dev/null -w "%{http_code}\n" --cacert veloce-ca.crt \
+  https://veloce.localhost:8443/health; done | sort | uniq -c
+
+# Ingress policy: a pod inside the cluster cannot skip Traefik
+kubectl run attacker --rm -i --restart=Never -n veloce --image=curlimages/curl -- \
+  curl -s -m 3 http://decision-service/health                                        # times out
+
+# Egress policy: nothing can leave the pod
 kubectl exec -n veloce deploy/decision-service -- \
-  python -c "import urllib.request; urllib.request.urlopen('https://example.com', timeout=5)"
-# fails: outbound traffic is denied
+  python -c "import urllib.request; urllib.request.urlopen('https://example.com', timeout=5)"  # fails
 ```
 
 k3s enforces NetworkPolicy out of the box; Docker Desktop's built-in Kubernetes does not.
@@ -171,6 +217,10 @@ k3s enforces NetworkPolicy out of the box; Docker Desktop's built-in Kubernetes 
 | Decision | Why |
 |---|---|
 | NetworkPolicy denies all egress | "Data never leaves" is enforced by the network, not only by the code (defense in depth) |
+| Only Traefik may reach the pod | A compromised pod elsewhere in the cluster cannot skip TLS, the rate limit and the security headers |
+| Rate limit at the Ingress, not in Python | A flood is refused with 429 before it reaches the service, so real decisions keep their latency |
+| Exact versions for dependencies and CI tools | An unpinned linter once passed locally (ruff 0.16) and failed in CI (ruff 0.17) on the same code |
+| Deploy verifier compares live endpoints with the code | Configuration drift is found by a check, not by a customer |
 | Card blocked by HMAC, not by number | The blocklist works without storing card numbers; useless without the key |
 | Audit log on local disk, not S3 | Uploading inside the request broke the 15 ms budget and sent card data off-site |
 | API key and hash key **fail closed** | A server with a missing key rejects every request (503) instead of running open |
@@ -230,16 +280,31 @@ python3.12 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/pip-audit -r requirements.txt
 ```
 
+Agents (from each agent folder, for example `agents/guardian`):
+
+```bash
+pytest -q
+```
+
+Check that the live environments match the code:
+
+```bash
+services/decision-service/.venv/bin/python agents/deploy-verifier/verifier.py --k8s-ca veloce-ca.crt
+```
+
 ## Repository layout
 
 ```
 services/decision-service/   decision API (FastAPI), tests, Dockerfile, docker-compose
-k8s/                         Kubernetes manifests
+k3d/cluster.yaml             the local Kubernetes cluster as code
+k8s/                         Kubernetes manifests: service, TLS, Ingress, middlewares, NetworkPolicy
+agents/deploy-verifier/      checks that Render, Kubernetes and the website run what the code says
+agents/guardian/             detects failing pods (step 1 of detect, diagnose, fix with approval)
 agents/rule-review/          AI reviewer for rule changes
-agents/fraud-analyst/        AI analyst: fraud statistics report (in progress)
-jenkins/Dockerfile           Jenkins image with Python, trivy and gitleaks
+agents/fraud-analyst/        AI analyst: fraud statistics report from the audit log
+jenkins/Dockerfile           Jenkins image with Python, trivy, gitleaks and the Docker CLI
 Jenkinsfile                  Jenkins pipeline with security scans
-.github/workflows/           GitHub Actions pipeline
+.github/workflows/           GitHub Actions: service, agents, Kubernetes manifests
 render.yaml                  demo deployment of the API
 index.html, assets/          website on Vercel
 ROADMAP.md                   what is built and what comes next
@@ -247,6 +312,7 @@ ROADMAP.md                   what is built and what comes next
 
 ## What comes next
 
-Redis for shared state (then more replicas), Prometheus and Grafana with a 15 ms SLO
-alert to Telegram, the AI reviewer as a pipeline gate, a Helm chart and GitOps with Flux,
-and Terraform. Details in [ROADMAP.md](ROADMAP.md).
+Continuous delivery from Jenkins to Kubernetes (image tagged with the commit SHA, Trivy image
+scan, rollout, deploy verifier, automatic rollback), a branch ruleset on `main`, a k6 load
+test for the 15 ms promise, Prometheus and Grafana with an SLO alert to Telegram, Redis for
+shared state, and a Helm chart. Details in [ROADMAP.md](ROADMAP.md).

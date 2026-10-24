@@ -20,3 +20,6 @@ __pycache__/
 
 # Editor settings (personal)
 .vscode/
+
+# Local CA certificate exported for curl (generated, not source)
+veloce-ca.crt

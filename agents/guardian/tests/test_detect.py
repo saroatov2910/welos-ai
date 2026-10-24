@@ -95,3 +95,10 @@ def test_finished_job_is_not_a_problem():
 
 def test_pod_shutting_down_during_rollout_is_not_a_problem():
     assert reasons([pod(containers=[container(False)], deleting=True)]) == []
+
+
+def test_container_between_restarts_is_reported_with_its_exit_reason():
+    stopped = container(False, 2)
+    stopped["state"] = {"terminated": {"reason": "Error", "exitCode": 1}}
+
+    assert reasons([pod(containers=[stopped])]) == ["Error"]

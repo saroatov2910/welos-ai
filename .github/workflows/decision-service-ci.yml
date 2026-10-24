@@ -72,7 +72,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install test tools
-        run: pip install pytest==8.4.2 ruff==0.17.1 # pinned: same results locally and in CI
+        run: pip install pytest==9.1.1 ruff==0.17.1 # pinned: same results locally and in CI
 
       - name: Lint
         run: ruff check .

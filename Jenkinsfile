@@ -14,6 +14,7 @@ pipeline {
 
     environment {
         SERVICE_DIR = 'services/decision-service'
+        IMAGE = 'veloce/decision-service'
     }
 
     stages {
@@ -92,6 +93,41 @@ pipeline {
                 '''
             }
         }
+
+        // Every image is tagged with its commit, so each version has its own name
+        // and a rollback really returns to the previous code.
+        stage('Build image') {
+            steps {
+                script {
+                    env.IMAGE_TAG = sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()
+                }
+                sh 'docker build -t "$IMAGE:$IMAGE_TAG" "$SERVICE_DIR"'
+                echo "Built ${env.IMAGE}:${env.IMAGE_TAG}"
+            }
+        }
+
+                // The image never reaches the cluster with a HIGH or CRITICAL vulnerability that has a fix.
+        stage('Scan image') {
+            steps {
+                sh '''
+                    trivy image --quiet --cache-dir "$JENKINS_HOME/.cache/trivy" \
+                      --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
+                      "$IMAGE:$IMAGE_TAG"
+                '''
+            }
+        }
+
+
+      // Moves the scanned image into the cluster and rolls the Deployment to it.
+        // Kubernetes starts the new pod first and removes the old one only when the new one is ready.
+        stage('Deploy') {
+            steps {
+                sh 'k3d image import "$IMAGE:$IMAGE_TAG" -c veloce'
+                withCredentials([file(credentialsId: 'k3d-veloce-kubeconfig', variable: 'KUBECONFIG')]) {
+                    sh 'kubectl -n veloce set image deployment/decision-service decision-service="$IMAGE:$IMAGE_TAG"'
+                }
+            }
+        } 
     }
 
     post {
