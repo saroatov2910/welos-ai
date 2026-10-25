@@ -22,15 +22,18 @@ flowchart TB
 
     subgraph git["GitHub"]
         develop["develop branch"]
-        main["main branch"]
+        main["main branch<br/>protected: PR + 5 green checks"]
         develop -->|"pull request"| main
     end
 
-    subgraph ci["CI: every commit"]
-        jenkins["Jenkins<br/>lint, format, 24 tests"]
+    gha["GitHub Actions: CI on every pull request<br/>service + agent tests,<br/>k8s manifest validation"]
+
+    subgraph cicd["Jenkins: CI/CD from main only"]
+        jenkins["lint, format, 24 tests"]
         scans["Security scans<br/>bandit, pip-audit,<br/>gitleaks, trivy"]
-        gha["GitHub Actions<br/>service + agent tests,<br/>k8s manifest validation"]
-        jenkins --> scans
+        image["Build image :commit-sha<br/>Trivy image scan"]
+        rollout["Deploy, verify rollout<br/>automatic rollback"]
+        jenkins --> scans --> image --> rollout
     end
 
     subgraph cd["Delivery"]
@@ -61,11 +64,12 @@ flowchart TB
     model["AI model<br/>aggregated numbers only"]
 
     dev -->|push| develop
-    develop --> jenkins
     develop -->|"pull request"| gha
+    gha -->|"green: merge"| main
+    main -->|"polled every 5 min"| jenkins
     main -->|"auto deploy"| render
     main --> vercel
-    main -.->|"manual kubectl apply"| traefik
+    rollout -->|"kubectl set image"| pod
     store -->|"HTTPS + X-API-Key"| traefik
     pod -->|"accept / review / reject"| store
     verifier --> render
@@ -129,31 +133,80 @@ same code, the code cannot be turned back into the number, and only blocked card
 ```mermaid
 flowchart LR
     dev[Developer] -->|push| develop[develop branch]
-    develop -->|polls every 5 min| jenkins[Jenkins]
-    jenkins --> checks[lint, format,<br/>24 tests]
-    checks --> scans[bandit, pip-audit,<br/>gitleaks, trivy]
-    develop -->|pull request| pr[PR to main]
-    pr --> gha[GitHub Actions<br/>service, 3 agents,<br/>kubeconform]
-    gha -->|merge| main[main branch]
+    develop -->|pull request| gha[GitHub Actions<br/>service, 3 agents,<br/>kubeconform]
+    gha -->|5 green checks: merge| main[main branch<br/>protected]
     main -->|auto deploy| render[Render demo]
-    main -.->|manual kubectl apply| k8s[Kubernetes k3s]
-    render --> verify[Deploy verifier<br/>live API = code?]
+    main -->|polled every 5 min| ci[Jenkins CI<br/>lint, tests, bandit,<br/>pip-audit, gitleaks, trivy]
+    ci --> build[Build image<br/>:commit-sha]
+    build --> scan[Trivy image scan]
+    scan --> deploy[k3d image import<br/>kubectl set image]
+    deploy --> verify{Rollout ready<br/>within 120 s?}
+    verify -->|yes| ok[SUCCESS]
+    verify -->|no| undo[rollout undo<br/>FAILURE]
 ```
 
-- **Two branches:** `develop` is where work happens and Jenkins checks every commit.
-  `main` is stable and changes through pull requests; enforcing green checks with a
-  branch ruleset is the next step.
+Everything is automated except the release decision: merging a pull request into `main`
+is a deliberate human gate. After the merge, tests, scans, the image, the deployment, the
+verification and, if needed, the rollback all run without anyone touching the cluster.
+
+- **Protected `main`:** a GitHub ruleset allows changes only through a pull request with five
+  green checks, and blocks direct pushes, force pushes and deletion. A direct push is
+  rejected with `GH013`.
+- **CD only from `main`:** Jenkins builds `*/main` only, and loads its `Jenkinsfile` from
+  `main`. Push access to `develop` therefore cannot run code on the build host or deploy to
+  the cluster (a poisoned-pipeline risk found in an audit of this repository).
+- **One image per commit:** every image is tagged with the commit SHA, so each revision of the
+  Deployment points to different code and `kubectl rollout undo` really returns to the
+  previous release. With a fixed `:dev` tag, a rollback would restore the same broken image.
+- **Image scan before deploy:** Trivy blocks images with HIGH or CRITICAL vulnerabilities
+  that have a fix (`--ignore-unfixed`), so the pipeline fails on what can be fixed.
+- **Zero-downtime rollout:** Kubernetes starts the new pod, waits for its readiness probe,
+  and only then removes the old one.
+- **Verify and automatic rollback:** Jenkins waits up to 120 seconds for the rollout. If the
+  new pod never becomes ready, it runs `rollout undo` and marks the build red.
 - **What GitHub Actions checks:** the decision service (lint, format, tests), each agent in
   a parallel matrix job, and every Kubernetes manifest against the API schema of the
-  cluster version with kubeconform, so a typo fails the pull request instead of `kubectl apply`.
-- **DevSecOps:** Jenkins scans every commit for vulnerable code (bandit), vulnerable
+  cluster version with kubeconform. It runs on every pull request, because the ruleset
+  requires its checks.
+- **DevSecOps:** Jenkins scans every build for vulnerable code (bandit), vulnerable
   dependencies (pip-audit), secrets anywhere in git history (gitleaks), and
   vulnerabilities or misconfigurations in files and the Dockerfile (trivy).
-- **Pinned versions:** application dependencies and CI tools use exact versions, so a
-  build gives the same result today and next month, locally and in CI.
+- **Pinned versions, kept fresh:** application dependencies, CI tools and base images use
+  exact versions, so a build gives the same result today and next month. Dependabot opens a
+  weekly pull request for updates, and GitHub security updates are enabled.
 - **Drift detection:** the deploy verifier compares the endpoints the live API serves with
   the endpoints in the code. It found the Render demo deploying from an old branch,
   43 commits behind `main`; after the fix it passes 5/5 checks.
+
+### Rollback, proven
+
+The rollback was tested with a deliberately broken release: the service listened on the
+wrong port, which passed every test and every scan.
+
+| Build | Commit | Result |
+|---|---|---|
+| #68 | `d763b22` | Deployed and verified |
+| #69 | `383b904` (wrong port) | Deployed; the new pod never became ready; Verify timed out after 120 s; `rollout undo` restored `d763b22`; build red. The old pod kept serving throughout |
+| #70 | `57014fe` (revert) | Deployed and verified |
+
+### Jenkins as code, with least privilege
+
+Jenkins itself is defined in the repository and has only the rights it needs.
+
+| File | What it does |
+|---|---|
+| [`jenkins/Dockerfile`](jenkins/Dockerfile) | Pinned base image with OS security updates; pinned trivy, gitleaks, Docker CLI, kubectl (SHA-256 verified) and k3d |
+| [`jenkins/docker-compose.yml`](jenkins/docker-compose.yml) | Runs Jenkins on `127.0.0.1:8080` only, with the Docker socket and the cluster network; jobs live in the `jenkins_home` volume |
+| [`k8s/jenkins-deployer.yaml`](k8s/jenkins-deployer.yaml) | ServiceAccount for Jenkins: may update and roll back Deployments in `veloce`; cannot read Secrets, delete anything, or reach other namespaces |
+| [`jenkins/kubeconfig.sh`](jenkins/kubeconfig.sh) | Builds the deployer kubeconfig without printing the token; it is stored only as an encrypted Jenkins credential |
+
+```bash
+docker compose -f jenkins/docker-compose.yml up -d --build
+kubectl auth can-i get secrets -n veloce --as=system:serviceaccount:veloce:jenkins-deployer   # no
+```
+
+Mounting the Docker socket gives Jenkins root on the host. That is accepted for a local lab;
+a production setup would build images with rootless BuildKit or Kaniko instead.
 
 ## Kubernetes
 
@@ -167,6 +220,12 @@ agents, a pinned k3s version, and only port 8443 (HTTPS) opened.
 | `ingress.yaml` | Traefik on HTTPS only; plain HTTP is never served |
 | `middlewares.yaml` | Rate limit (10 req/s per client, burst 20, then 429) and security headers (HSTS, nosniff, frame deny, no server header) |
 | `networkpolicy.yaml` | In: only Traefik may reach the pod. Out: nothing may leave it |
+| `jenkins-deployer.yaml` | Least-privilege identity that Jenkins uses to deploy and roll back |
+
+After the first install, Jenkins owns the image of the Deployment: each release sets
+`decision-service=veloce/decision-service:<commit>`. The `:dev` tag in `deployment.yaml` is
+only the bootstrap image, so re-applying that file by hand would roll the service back;
+moving the tag into Kustomize is planned.
 
 ```bash
 # 1. Cluster and cert-manager
@@ -221,6 +280,11 @@ k3s enforces NetworkPolicy out of the box; Docker Desktop's built-in Kubernetes 
 | Rate limit at the Ingress, not in Python | A flood is refused with 429 before it reaches the service, so real decisions keep their latency |
 | Exact versions for dependencies and CI tools | An unpinned linter once passed locally (ruff 0.16) and failed in CI (ruff 0.17) on the same code |
 | Deploy verifier compares live endpoints with the code | Configuration drift is found by a check, not by a customer |
+| CD only from a protected `main` | Whoever controls the `Jenkinsfile` runs code with the deploy credential; only reviewed, green code may do that |
+| Images tagged with the commit SHA, never `:dev` | Each release is traceable to its code, and a rollback returns to a different image |
+| Verify the rollout, roll back automatically | A release that passes tests but never becomes ready is undone without a person (proven with build #69) |
+| Jenkins gets its own ServiceAccount, not the admin kubeconfig | A compromised CI server can update one Deployment, not read Secrets or take over the cluster |
+| Merging into `main` stays manual | Everything else is automated; a person decides when a release reaches the bank |
 | Card blocked by HMAC, not by number | The blocklist works without storing card numbers; useless without the key |
 | Audit log on local disk, not S3 | Uploading inside the request broke the 15 ms budget and sent card data off-site |
 | API key and hash key **fail closed** | A server with a missing key rejects every request (503) instead of running open |
@@ -297,14 +361,15 @@ services/decision-service/.venv/bin/python agents/deploy-verifier/verifier.py --
 ```
 services/decision-service/   decision API (FastAPI), tests, Dockerfile, docker-compose
 k3d/cluster.yaml             the local Kubernetes cluster as code
-k8s/                         Kubernetes manifests: service, TLS, Ingress, middlewares, NetworkPolicy
+k8s/                         Kubernetes manifests: service, TLS, Ingress, middlewares, NetworkPolicy, Jenkins RBAC
 agents/deploy-verifier/      checks that Render, Kubernetes and the website run what the code says
-agents/guardian/             detects failing pods (step 1 of detect, diagnose, fix with approval)
+agents/guardian/             detects failing pods and diagnoses them from events, logs and playbooks
 agents/rule-review/          AI reviewer for rule changes
 agents/fraud-analyst/        AI analyst: fraud statistics report from the audit log
-jenkins/Dockerfile           Jenkins image with Python, trivy, gitleaks and the Docker CLI
-Jenkinsfile                  Jenkins pipeline with security scans
+jenkins/                     Jenkins as code: Dockerfile, docker-compose.yml, kubeconfig script
+Jenkinsfile                  CI/CD: tests, scans, image build and scan, deploy, verify, rollback
 .github/workflows/           GitHub Actions: service, agents, Kubernetes manifests
+.github/dependabot.yml       weekly updates for pip packages, base images and Actions
 render.yaml                  demo deployment of the API
 index.html, assets/          website on Vercel
 ROADMAP.md                   what is built and what comes next
@@ -312,7 +377,8 @@ ROADMAP.md                   what is built and what comes next
 
 ## What comes next
 
-Continuous delivery from Jenkins to Kubernetes (image tagged with the commit SHA, Trivy image
-scan, rollout, deploy verifier, automatic rollback), a branch ruleset on `main`, a k6 load
-test for the 15 ms promise, Prometheus and Grafana with an SLO alert to Telegram, Redis for
-shared state, and a Helm chart. Details in [ROADMAP.md](ROADMAP.md).
+A Makefile that rebuilds the whole environment from git in one command, with the Kubernetes
+API bound to localhost and Secrets encrypted at rest; a k6 load test and Prometheus and
+Grafana to prove the 15 ms promise, with an SLO alert to Telegram; Kustomize so the image tag
+lives in git; security scans and an image build in GitHub Actions; and a Helm chart for
+on-prem installs. Details in [ROADMAP.md](ROADMAP.md).
