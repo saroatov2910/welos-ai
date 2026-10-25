@@ -1,4 +1,6 @@
-// CI pipeline for decision-service: install -> lint -> format -> tests -> security scans.
+// CI/CD pipeline for decision-service, built from main only:
+// install -> lint -> format -> tests -> security scans -> build image -> scan image
+// -> deploy -> verify, with an automatic rollback when anything after the deploy fails.
 pipeline {
     agent any
 
@@ -106,7 +108,7 @@ pipeline {
             }
         }
 
-                // The image never reaches the cluster with a HIGH or CRITICAL vulnerability that has a fix.
+        // The image never reaches the cluster with a HIGH or CRITICAL vulnerability that has a fix.
         stage('Scan image') {
             steps {
                 sh '''
@@ -117,8 +119,7 @@ pipeline {
             }
         }
 
-
-      // Moves the scanned image into the cluster and rolls the Deployment to it.
+        // Moves the scanned image into the cluster and rolls the Deployment to it.
         // Kubernetes starts the new pod first and removes the old one only when the new one is ready.
         stage('Deploy') {
             steps {
@@ -126,12 +127,33 @@ pipeline {
                 withCredentials([file(credentialsId: 'k3d-veloce-kubeconfig', variable: 'KUBECONFIG')]) {
                     sh 'kubectl -n veloce set image deployment/decision-service decision-service="$IMAGE:$IMAGE_TAG"'
                 }
+                script { env.DEPLOYED = 'true' }
             }
-        } 
+        }
+
+        // Waits until the new pod is ready. A pod that never becomes ready fails the build.
+        stage('Verify') {
+            steps {
+                withCredentials([file(credentialsId: 'k3d-veloce-kubeconfig', variable: 'KUBECONFIG')]) {
+                    sh 'kubectl -n veloce rollout status deployment/decision-service --timeout=120s'
+                }
+            }
+        }
     }
 
     post {
         success { echo 'All checks passed.' }
-        failure { echo 'Pipeline failed - see the stage marked in red.' }
+        failure {
+            echo 'Pipeline failed - see the stage marked in red.'
+            script {
+                // A failed deploy is rolled back to the previous revision automatically.
+                if (env.DEPLOYED == 'true') {
+                    withCredentials([file(credentialsId: 'k3d-veloce-kubeconfig', variable: 'KUBECONFIG')]) {
+                        sh 'kubectl -n veloce rollout undo deployment/decision-service'
+                        sh 'kubectl -n veloce rollout status deployment/decision-service --timeout=120s'
+                    }
+                }
+            }
+        }
     }
 }

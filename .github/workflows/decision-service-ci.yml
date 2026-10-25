@@ -11,13 +11,9 @@ on:
       - "k8s/**"
       - "k3d/**"
       - ".github/workflows/decision-service-ci.yml"
+  # Every pull request runs the full CI: the ruleset on main requires these checks,
+  # so a path filter here would leave a PR that only touches other files unmergeable.
   pull_request:
-    paths:
-      - "services/decision-service/**"
-      - "agents/**"
-      - "k8s/**"
-      - "k3d/**"
-      - ".github/workflows/decision-service-ci.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
