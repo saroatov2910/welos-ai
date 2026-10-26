@@ -211,7 +211,31 @@ a production setup would build images with rootless BuildKit or Kaniko instead.
 ## Kubernetes
 
 The cluster itself is code in [`k3d/cluster.yaml`](k3d/cluster.yaml): one server, two
-agents, a pinned k3s version, and only port 8443 (HTTPS) opened.
+agents, a pinned k3s version, the Kubernetes API and HTTPS bound to localhost only, and
+Secrets encrypted at rest.
+
+### Rebuild from scratch
+
+The whole environment comes from git through the [`Makefile`](Makefile). Every target can
+run again: it skips what exists, never replaces secrets, and never re-applies the image
+that Jenkins owns.
+
+```bash
+make help        # list the commands
+make up          # cluster, cert-manager, secrets, manifests, CA, then verify
+make status      # cluster, running image, pods
+make verify      # HTTPS, Render, pods and website against the code (6 checks)
+make destroy     # delete the cluster (asks first)
+```
+
+This was tested as a disaster recovery: the cluster was deleted and rebuilt with
+`make up`, and all six checks passed. A new cluster means a new CA and a new token, so
+Jenkins needs a new credential (`make jenkins-credential`, then replace the
+`k3d-veloce-kubeconfig` credential). Until then Jenkins refuses to connect
+(`x509: certificate signed by unknown authority`), which is TLS doing its job.
+
+A rebuild creates new `API_KEY` and `CARD_HASH_KEY` values and an empty audit log. That is
+acceptable for a lab; a bank would back up Secrets and volumes (for example with Velero).
 
 | Manifest | What it does |
 |---|---|
@@ -226,6 +250,8 @@ After the first install, Jenkins owns the image of the Deployment: each release 
 `decision-service=veloce/decision-service:<commit>`. The `:dev` tag in `deployment.yaml` is
 only the bootstrap image, so re-applying that file by hand would roll the service back;
 moving the tag into Kustomize is planned.
+
+The same steps by hand, which is what `make up` runs:
 
 ```bash
 # 1. Cluster and cert-manager
@@ -360,7 +386,8 @@ services/decision-service/.venv/bin/python agents/deploy-verifier/verifier.py --
 
 ```
 services/decision-service/   decision API (FastAPI), tests, Dockerfile, docker-compose
-k3d/cluster.yaml             the local Kubernetes cluster as code
+Makefile                     make up / verify / status / destroy: the environment from git
+k3d/cluster.yaml             the local Kubernetes cluster as code, hardened
 k8s/                         Kubernetes manifests: service, TLS, Ingress, middlewares, NetworkPolicy, Jenkins RBAC
 agents/deploy-verifier/      checks that Render, Kubernetes and the website run what the code says
 agents/guardian/             detects failing pods and diagnoses them from events, logs and playbooks
@@ -377,8 +404,8 @@ ROADMAP.md                   what is built and what comes next
 
 ## What comes next
 
-A Makefile that rebuilds the whole environment from git in one command, with the Kubernetes
-API bound to localhost and Secrets encrypted at rest; a k6 load test and Prometheus and
+API hardening (no thresholds or card expiry in responses, 409 for duplicate transactions,
+server time); a k6 load test and Prometheus and
 Grafana to prove the 15 ms promise, with an SLO alert to Telegram; Kustomize so the image tag
 lives in git; security scans and an image build in GitHub Actions; and a Helm chart for
 on-prem installs. Details in [ROADMAP.md](ROADMAP.md).
