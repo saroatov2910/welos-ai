@@ -29,7 +29,7 @@ jobs:
       run:
         working-directory: services/decision-service
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v5
         with:
@@ -61,7 +61,7 @@ jobs:
       run:
         working-directory: agents/${{ matrix.agent }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v5
         with:
@@ -79,7 +79,7 @@ jobs:
   k8s-manifests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Checks every manifest against the Kubernetes API schema of the cluster version,
       # plus the Traefik and cert-manager CRD schemas. A typo fails here, not at kubectl apply.
