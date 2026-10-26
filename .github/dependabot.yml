@@ -1,0 +1,43 @@
+# Dependabot: once a week, open a pull request for every outdated dependency.
+# Versions are pinned for reproducible builds; Dependabot keeps them from going stale.
+# Pull requests target develop and pass the same five CI checks as any other change.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /services/decision-service
+    schedule:
+      interval: weekly
+    target-branch: develop
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "build(deps)"
+
+  - package-ecosystem: pip
+    directories:
+      - /agents/fraud-analyst
+      - /agents/rule-review
+    schedule:
+      interval: weekly
+    target-branch: develop
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "build(deps)"
+
+  # Base images: python:3.12-slim for the service, jenkins/jenkins for the CI server.
+  - package-ecosystem: docker
+    directories:
+      - /services/decision-service
+      - /jenkins
+    schedule:
+      interval: weekly
+    target-branch: develop
+    commit-message:
+      prefix: "build(docker)"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    target-branch: develop
+    commit-message:
+      prefix: "ci(deps)"
