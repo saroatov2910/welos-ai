@@ -1,0 +1,25 @@
+# gitleaks: what counts as a leak in this repository.
+# The default rules find keys and tokens, but not card numbers. For a payment
+# system a card number in git is a leak too (PCI DSS 3.4), so it is added here.
+title = "Veloce gitleaks config"
+
+[extend]
+useDefault = true # keep every built-in rule (AWS keys, tokens, private keys...)
+
+# Visa, Mastercard (51-55 and 2221-2720), Discover (16 digits) and Amex (15 digits),
+# with or without spaces or dashes. A longer run of digits (an order id) is not a match.
+[[rules]]
+id = "card-number"
+description = "Card number (PAN)"
+regex = '''(?:^|[^0-9])((?:4[0-9]{3}|5[1-5][0-9]{2}|2[2-7][0-9]{2}|6011|65[0-9]{2})[ -]?[0-9]{4}[ -]?[0-9]{4}[ -]?[0-9]{4}|3[47][0-9]{2}[ -]?[0-9]{6}[ -]?[0-9]{5})(?:[^0-9]|$)'''
+secretGroup = 1
+
+# Official test cards, used by the tests. They can never charge anyone.
+[[rules.allowlists]]
+regexTarget = "secret"
+regexes = [
+  '''^4242[ -]?4242[ -]?4242[ -]?4242$''', # Visa
+  '''^4111[ -]?1111[ -]?1111[ -]?1111$''', # Visa
+  '''^5555[ -]?5555[ -]?5555[ -]?4444$''', # Mastercard
+  '''^3782[ -]?822463[ -]?10005$''',       # Amex
+]
