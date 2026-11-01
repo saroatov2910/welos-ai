@@ -51,6 +51,13 @@ jobs:
       - name: Test
         run: pytest -q
 
+      # The same scans as Jenkins, but on the pull request, before anything reaches main.
+      - name: "Security: code (bandit)"
+        run: bandit -r app --severity-level medium
+
+      - name: "Security: dependencies (pip-audit)"
+        run: pip-audit -r requirements.txt
+
   agents:
     runs-on: ubuntu-latest
     strategy:
@@ -66,6 +73,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      # The agent's own dependencies, so a Dependabot update is really tested.
+      # deploy-verifier and guardian use only the standard library and have none.
+      - name: Install dependencies
+        run: |
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
       - name: Install test tools
         run: pip install pytest==9.1.1 ruff==0.17.1 # pinned: same results locally and in CI
