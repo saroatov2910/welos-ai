@@ -1,7 +1,7 @@
 name: CI
 
 # Runs when anything the system is built from changes: service code, agents,
-# Kubernetes manifests, cluster config, or this workflow itself.
+# the website, Kubernetes manifests, cluster config, or this workflow itself.
 on:
   push:
     branches: [main]
@@ -10,6 +10,7 @@ on:
       - "agents/**"
       - "k8s/**"
       - "k3d/**"
+      - "frontend/**"
       - ".github/workflows/decision-service-ci.yml"
   # Every pull request runs the full CI: the ruleset on main requires these checks,
   # so a path filter here would leave a PR that only touches other files unmergeable.
@@ -88,6 +89,31 @@ jobs:
 
       - name: Test
         run: pytest -q
+
+  # The React website: the same clean install and build that Vercel runs,
+  # plus an audit of the npm packages. A broken build fails here, not on the live site.
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: "Security: dependencies (npm audit)"
+        run: npm audit --audit-level=high
+
+      - name: Build
+        run: npm run build
 
   k8s-manifests:
     runs-on: ubuntu-latest
