@@ -1,5 +1,7 @@
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, FastAPI, HTTPException
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 from app import blocklist
 from app.audit import write_audit_event
@@ -13,6 +15,14 @@ app = FastAPI(title="WelosAI Decision Service")
 
 # Every route on this router requires a valid X-API-Key header.
 protected = APIRouter(dependencies=[Depends(require_api_key)])
+
+
+# FastAPI's default 422 response echoes the request body, card number and CVV included.
+# Return only which field failed and why, never the value that was sent.
+@app.exception_handler(RequestValidationError)
+async def validation_error_without_input(request: Request, exc: RequestValidationError):
+    errors = [{"loc": error["loc"], "msg": error["msg"], "type": error["type"]} for error in exc.errors()]
+    return JSONResponse(status_code=422, content={"detail": errors})
 
 
 @protected.post("/get_check_transaction")
