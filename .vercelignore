@@ -1,6 +1,7 @@
-# Allowlist: Vercel serves only the static website.
+# Allowlist: Vercel builds only the React website in frontend/.
 # Everything else (services, agents, Jenkins, .env secrets) is never uploaded.
 /*
-!index.html
 !vercel.json
-!assets
+!frontend
+frontend/node_modules
+frontend/dist
