@@ -1,7 +1,10 @@
 name: CI
 
-# Runs when anything the system is built from changes: service code, agents,
-# the website, Kubernetes manifests, cluster config, or this workflow itself.
+# ----------------------------------------------------------------------------
+# Runs when anything the system is built from changes: service code, agents, -
+# the website, Kubernetes manifests, cluster config, or this workflow itself.-
+# ----------------------------------------------------------------------------
+  
 on:
   push:
     branches: [main]
