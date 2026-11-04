@@ -395,10 +395,10 @@ agents/rule-review/          AI reviewer for rule changes
 agents/fraud-analyst/        AI analyst: fraud statistics report from the audit log
 jenkins/                     Jenkins as code: Dockerfile, docker-compose.yml, kubeconfig script
 Jenkinsfile                  CI/CD: tests, scans, image build and scan, deploy, verify, rollback
-.github/workflows/           GitHub Actions: service, agents, Kubernetes manifests
-.github/dependabot.yml       weekly updates for pip packages, base images and Actions
+.github/workflows/           GitHub Actions: service, agents, website, Kubernetes manifests
+.github/dependabot.yml       weekly updates for pip and npm packages, base images and Actions
 render.yaml                  demo deployment of the API
-index.html, assets/          website on Vercel
+frontend/                    website in React (Vite), deployed to Vercel by vercel.json
 ROADMAP.md                   what is built and what comes next
 ```
 
