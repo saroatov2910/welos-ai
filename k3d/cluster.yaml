@@ -1,6 +1,6 @@
 # The local Kubernetes cluster as code.
-# Create:  k3d cluster create --config k3d/cluster.yaml
-# Delete:  k3d cluster delete veloce
+# Create:  make cluster   (or: k3d cluster create --config k3d/cluster.yaml)
+# Delete:  make destroy
 apiVersion: k3d.io/v1alpha5
 kind: Simple
 metadata:
@@ -8,8 +8,20 @@ metadata:
 servers: 1
 agents: 2 # worker nodes, so a pod can move when a node fails
 image: rancher/k3s:v1.35.5-k3s1 # pinned: every cluster gets the same Kubernetes version
+kubeAPI:
+  # The Kubernetes API listens on this computer only, not on the network.
+  hostIP: "127.0.0.1"
+  hostPort: "6550"
 ports:
-  # https://veloce.localhost:8443 -> Traefik websecure (443). No plain HTTP port is opened.
-  - port: 8443:443
+  # https://veloce.localhost:8443 -> Traefik websecure (443), on this computer only.
+  # No plain HTTP port is opened.
+  - port: 127.0.0.1:8443:443
     nodeFilters:
       - loadbalancer
+options:
+  k3s:
+    extraArgs:
+      # Secrets (API_KEY, CARD_HASH_KEY, the Jenkins token) are encrypted at rest in the datastore.
+      - arg: --secrets-encryption
+        nodeFilters:
+          - server:*

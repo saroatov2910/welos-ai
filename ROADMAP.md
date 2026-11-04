@@ -56,7 +56,10 @@ commit → CI (lint, tests, security scans) → image → deploy → verify / ro
 - [x] Secrets only in the environment, never in git; `.vercelignore` allowlist
 
 ### Containers and Kubernetes
-- [x] Cluster as code (`k3d/cluster.yaml`), pinned k3s version
+- [x] Cluster as code (`k3d/cluster.yaml`), pinned k3s version, three nodes
+- [x] Kubernetes API and HTTPS bound to localhost; Secrets encrypted at rest
+- [x] `Makefile`: `make up`, `make verify`, `make destroy`; safe to run again
+- [x] Disaster recovery tested: cluster deleted and rebuilt from git, 6/6 checks
 - [x] Multi-stage Docker image, non-root user, healthcheck
 - [x] Kubernetes manifests: Namespace, Deployment, Service, PVC for the audit log
 - [x] Liveness and readiness probes, resource requests and limits
@@ -78,8 +81,6 @@ commit → CI (lint, tests, security scans) → image → deploy → verify / ro
 ## Next
 
 ### Infrastructure as code and hardening
-- [ ] Makefile: `make cluster`, `make deploy`, `make destroy`; rebuild everything from git
-- [ ] Kubernetes API and HTTPS port bound to localhost; Secrets encrypted at rest
 - [ ] AWS keys out of local `.env` files
 - [ ] Kustomize, so the deployed image tag lives in git (no drift)
 
