@@ -6,7 +6,7 @@ export default function Pipeline() {
     <section id="pipeline" className="alt">
       <div className="container">
         <h2>Delivery pipeline</h2>
-        <p className="sub">A change reaches production only after it passes every check.</p>
+        <p className="sub">Every change is checked on the pull request, then checked again before it reaches Kubernetes. The Render demo and this website deploy separately from main.</p>
         <div className="pipeline">
           {PIPELINE.map((stage, index) => (
             <Fragment key={stage.label}>
