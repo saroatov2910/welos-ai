@@ -12,7 +12,7 @@ pipeline {
     options {
         timeout(time: 15, unit: 'MINUTES')
         disableConcurrentBuilds()
-    }
+    }docker build
 
     environment {
         SERVICE_DIR = 'services/decision-service'
@@ -103,7 +103,7 @@ pipeline {
                 script {
                     env.IMAGE_TAG = sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()
                 }
-                sh 'docker build -t "$IMAGE:$IMAGE_TAG" "$SERVICE_DIR"'
+                sh 'docker build --pull -t "$IMAGE:$IMAGE_TAG" "$SERVICE_DIR"'
                 echo "Built ${env.IMAGE}:${env.IMAGE_TAG}"
             }
         }
