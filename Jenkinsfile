@@ -96,46 +96,59 @@ pipeline {
             }
         }
 
-        // Every image is tagged with its commit, so each version has its own name
-        // and a rollback really returns to the previous code.
-        stage('Build image') {
-            steps {
-                script {
-                    env.IMAGE_TAG = sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()
+        // Only a change to the service, or a person pressing Build Now, builds and deploys.
+        // A change to the website or the docs is still checked, but does not restart the pod,
+        // because blocks and velocity counters are still kept in memory.
+        stage('Release') {
+            when {
+                anyOf {
+                    changeset 'services/decision-service/**'
+                    triggeredBy 'UserIdCause'
                 }
-                sh ' docker build --pull -t "$IMAGE:$IMAGE_TAG" "$SERVICE_DIR"'
-                echo "Built ${env.IMAGE}:${env.IMAGE_TAG}"
             }
-        }
-
-        // The image never reaches the cluster with a HIGH or CRITICAL vulnerability that has a fix.
-        stage('Scan image') {
-            steps {
-                sh '''
-                    trivy image --quiet --cache-dir "$JENKINS_HOME/.cache/trivy" \
-                      --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
-                      "$IMAGE:$IMAGE_TAG"
-                '''
-            }
-        }
-
-        // Moves the scanned image into the cluster and rolls the Deployment to it.
-        // Kubernetes starts the new pod first and removes the old one only when the new one is ready.
-        stage('Deploy') {
-            steps {
-                sh 'k3d image import "$IMAGE:$IMAGE_TAG" -c veloce'
-                withCredentials([file(credentialsId: 'k3d-veloce-kubeconfig', variable: 'KUBECONFIG')]) {
-                    sh 'kubectl -n veloce set image deployment/decision-service decision-service="$IMAGE:$IMAGE_TAG"'
+            stages {
+                // Every image is tagged with its commit, so each version has its own name
+                // and a rollback really returns to the previous code.
+                stage('Build image') {
+                    steps {
+                        script {
+                            env.IMAGE_TAG = sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()
+                        }
+                        sh 'docker build --pull -t "$IMAGE:$IMAGE_TAG" "$SERVICE_DIR"'
+                        echo "Built ${env.IMAGE}:${env.IMAGE_TAG}"
+                    }
                 }
-                script { env.DEPLOYED = 'true' }
-            }
-        }
 
-        // Waits until the new pod is ready. A pod that never becomes ready fails the build.
-        stage('Verify') {
-            steps {
-                withCredentials([file(credentialsId: 'k3d-veloce-kubeconfig', variable: 'KUBECONFIG')]) {
-                    sh 'kubectl -n veloce rollout status deployment/decision-service --timeout=120s'
+                // The image never reaches the cluster with a HIGH or CRITICAL vulnerability that has a fix.
+                stage('Scan image') {
+                    steps {
+                        sh '''
+                            trivy image --quiet --cache-dir "$JENKINS_HOME/.cache/trivy" \
+                              --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
+                              "$IMAGE:$IMAGE_TAG"
+                        '''
+                    }
+                }
+
+                // Moves the scanned image into the cluster and rolls the Deployment to it.
+                // Kubernetes starts the new pod first and removes the old one only when the new one is ready.
+                stage('Deploy') {
+                    steps {
+                        sh 'k3d image import "$IMAGE:$IMAGE_TAG" -c veloce'
+                        withCredentials([file(credentialsId: 'k3d-veloce-kubeconfig', variable: 'KUBECONFIG')]) {
+                            sh 'kubectl -n veloce set image deployment/decision-service decision-service="$IMAGE:$IMAGE_TAG"'
+                        }
+                        script { env.DEPLOYED = 'true' }
+                    }
+                }
+
+                // Waits until the new pod is ready. A pod that never becomes ready fails the build.
+                stage('Verify') {
+                    steps {
+                        withCredentials([file(credentialsId: 'k3d-veloce-kubeconfig', variable: 'KUBECONFIG')]) {
+                            sh 'kubectl -n veloce rollout status deployment/decision-service --timeout=120s'
+                        }
+                    }
                 }
             }
         }
@@ -143,10 +156,11 @@ pipeline {
 
     post {
         success { echo 'All checks passed.' }
-        failure {
-            echo 'Pipeline failed - see the stage marked in red.'
+        // unsuccessful covers a failed build and one a person aborted during the rollout.
+        unsuccessful {
+            echo 'Pipeline did not finish - see the stage marked in red.'
             script {
-                // A failed deploy is rolled back to the previous revision automatically.
+                // A deploy that did not finish is rolled back to the previous revision automatically.
                 if (env.DEPLOYED == 'true') {
                     withCredentials([file(credentialsId: 'k3d-veloce-kubeconfig', variable: 'KUBECONFIG')]) {
                         sh 'kubectl -n veloce rollout undo deployment/decision-service'
