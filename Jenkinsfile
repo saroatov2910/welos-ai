@@ -103,7 +103,7 @@ pipeline {
                 script {
                     env.IMAGE_TAG = sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()
                 }
-                sh 'docker build --pull -t "$IMAGE:$IMAGE_TAG" "$SERVICE_DIR"'
+                sh '--pull -t "$IMAGE:$IMAGE_TAG" "$SERVICE_DIR"'
                 echo "Built ${env.IMAGE}:${env.IMAGE_TAG}"
             }
         }
