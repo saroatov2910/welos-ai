@@ -95,4 +95,4 @@ export const PIPELINE = [
   { label: "AI rule review gate", done: false },
 ];
 
-export const DEMO_WARNING = "Public demo. Never enter a real card: use the test card 4242 4242 4242 4242.";
+export const DEMO_WARNING = "";
