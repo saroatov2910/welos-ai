@@ -86,13 +86,15 @@ export const DECISIONS = [
 
 // done: true = running today, false = on the roadmap.
 export const PIPELINE = [
-  { label: "git push", done: true },
-  { label: "Jenkins: lint + tests", done: true },
-  { label: "Security scans: bandit, pip-audit, gitleaks, trivy", done: true },
-  { label: "Pull request + GitHub Actions", done: true },
-  { label: "Docker image", done: true },
-  { label: "Deploy: Render + Kubernetes (k3s)", done: true },
+  { label: "Pull request", done: true },
+  { label: "GitHub Actions: lint, tests, bandit, pip-audit", done: true },
   { label: "AI rule review gate", done: false },
+  { label: "Merge to main", done: true },
+  { label: "Jenkins: tests, gitleaks, trivy", done: true },
+  { label: "Build and scan image", done: true },
+  { label: "Deploy to Kubernetes (k3s)", done: true },
+  { label: "Verify + automatic rollback", done: true },
 ];
+
 
 export const DEMO_WARNING = "";
