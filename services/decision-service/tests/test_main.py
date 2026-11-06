@@ -211,3 +211,13 @@ def test_blocking_fails_closed_without_hash_key(monkeypatch):
     response = client.post("/blocks", json={"card_number": VISA, "reason": "x"})
 
     assert response.status_code == 503
+
+
+def test_block_cannot_be_bypassed_with_non_ascii_digits():
+    client.post("/blocks", json={"card_number": VISA, "reason": "stolen"})
+    arabic_digits = VISA.translate(str.maketrans("0123456789", "٠١٢٣٤٥٦٧٨٩"))
+
+    response = _decide(card_number=arabic_digits)
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid card number format"

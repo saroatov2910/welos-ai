@@ -79,7 +79,9 @@ def _is_luhn_valid(card_number: str) -> bool:
 
 def validate_card_number(card_number: str) -> str:
     normalized = _digits_only(card_number)
-    if not normalized.isdigit() or not 12 <= len(normalized) <= 19:
+    # isdigit alone accepts digits from other scripts, which would give a blocked card a new fingerprint.
+
+    if not (normalized.isascii() and normalized.isdigit()) or not 12 <= len(normalized) <= 19:
         raise HTTPException(status_code=400, detail="Invalid card number format")
     if not _is_luhn_valid(normalized):
         raise HTTPException(status_code=400, detail="Invalid card number")
