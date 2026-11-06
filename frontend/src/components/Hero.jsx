@@ -9,7 +9,7 @@ export default function Hero() {
         <p className="lead">{HERO.lead}</p>
         <div className="actions">
           <a className="btn btn-primary" href={LINKS.api}>
-            Try the live API
+            View the API docs 
           </a>
           <a className="btn btn-secondary" href={LINKS.code}>
             View the code

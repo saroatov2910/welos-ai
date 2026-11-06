@@ -1,5 +1,6 @@
-# Render Blueprint: public demo environment for the decision-service API.
-# The real product runs on-prem; this is only a demo. Use test cards only.
+#--------------------------------------------------------------------------
+# Render Blueprint: public demo environment for the decision-service API. -
+# The real product runs on-prem; this is only a demo. Use test cards only. -  
 services:
   - type: web
     name: veloce-decision-service
@@ -14,3 +15,7 @@ services:
       # The container listens on 8000 (see Dockerfile CMD).
       - key: PORT
         value: "8000"
+      # Public demo only: production keeps the API documentation closed.
+      - key: ENABLE_DOCS
+        value: "true"
+

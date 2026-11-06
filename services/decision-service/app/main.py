@@ -1,3 +1,5 @@
+import os
+
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -11,7 +13,14 @@ from app.services import get_decision_or_404, save_transaction_decision, validat
 
 load_dotenv()
 
-app = FastAPI(title="WelosAI Decision Service")
+# The API map stays closed unless ENABLE_DOCS=true: on for the public demo, off in production.
+docs_enabled = os.getenv("ENABLE_DOCS", "false").lower() == "true"
+app = FastAPI(
+    title="WelosAI Decision Service",
+    docs_url="/docs" if docs_enabled else None,
+    redoc_url="/redoc" if docs_enabled else None,
+    openapi_url="/openapi.json" if docs_enabled else None,
+)
 
 # Every route on this router requires a valid X-API-Key header.
 protected = APIRouter(dependencies=[Depends(require_api_key)])

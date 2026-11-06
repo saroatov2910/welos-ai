@@ -10,7 +10,7 @@ export const NAV = [
   { label: "Product", href: "#promises" },
   { label: "How it works", href: "#how" },
   { label: "Pipeline", href: "#pipeline" },
-  { label: "Live API", href: LINKS.api },
+  { label: "API docs", href: LINKS.api },
 ];
 
 export const HERO = {
